@@ -1,13 +1,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "driver/i2c.h"
-#include "driver/i2c_master.h"
+#include "driver/uart.h"
 #include "driver/ledc.h"
+#include "driver/gpio.h"
 
 #include "esp_attr.h"
 #include "esp_check.h"
@@ -20,98 +22,53 @@
 #include "esp_lcd_st7701.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
+#include "esp_timer.h"
 
+#include "jpeg_decoder.h"
+
+/* ────────── Display ────────── */
 #define LCD_H_RES 480
 #define LCD_V_RES 480
 #define LCD_BITS_PER_PIXEL 16
 #define LCD_BYTES_PER_PIXEL 2
+#define LCD_FB_SIZE (LCD_H_RES * LCD_V_RES * LCD_BYTES_PER_PIXEL)
 
-#define LCD_PIN_PCLK 21
-#define LCD_PIN_DE 18
-#define LCD_PIN_VSYNC 17
-#define LCD_PIN_HSYNC 16
-
-#define LCD_PIN_SPI_CS 39
+#define LCD_PIN_PCLK    21
+#define LCD_PIN_DE      18
+#define LCD_PIN_VSYNC   17
+#define LCD_PIN_HSYNC   16
+#define LCD_PIN_SPI_CS  39
 #define LCD_PIN_SPI_SCL 48
 #define LCD_PIN_SPI_SDA 47
-
-#define LCD_PIN_BL 38
-
-#define TOUCH_I2C_PORT I2C_NUM_0
-#define TOUCH_PIN_SDA 19
-#define TOUCH_PIN_SCL 45
-
-#define GT911_ADDR_PRIMARY 0x5D
-#define GT911_ADDR_BACKUP 0x14
-#define GT911_REG_PRODUCT_ID 0x8140
-#define GT911_REG_CONFIG_VERSION 0x8047
-#define GT911_REG_POINT_INFO 0x814E
-#define GT911_REG_POINT_1 0x814F
-#define GT911_MAX_CONTACTS 5
-#define TOUCH_POLL_MS 10
-#define TOUCH_I2C_SPEED_HZ 100000
-#define TOUCH_I2C_TIMEOUT_MS 50
-
+#define LCD_PIN_BL      38
 #define LCD_PCLK_HZ (12 * 1000 * 1000)
-#define LCD_BOUNCE_LINES 10
-#define LCD_BOUNCE_PIXELS (LCD_H_RES * LCD_BOUNCE_LINES)
 
-#define PHASE1A_SOLID_MS 1000
-#define PHASE1A_BARS_MS 2000
+#define RGB_DATA_PIN_BLUE_0   4
+#define RGB_DATA_PIN_BLUE_1   5
+#define RGB_DATA_PIN_BLUE_2   6
+#define RGB_DATA_PIN_BLUE_3   7
+#define RGB_DATA_PIN_BLUE_4   15
+#define RGB_DATA_PIN_GREEN_0  8
+#define RGB_DATA_PIN_GREEN_1  20
+#define RGB_DATA_PIN_GREEN_2  3
+#define RGB_DATA_PIN_GREEN_3  46
+#define RGB_DATA_PIN_GREEN_4  9
+#define RGB_DATA_PIN_GREEN_5  10
+#define RGB_DATA_PIN_RED_0    11
+#define RGB_DATA_PIN_RED_1    12
+#define RGB_DATA_PIN_RED_2    13
+#define RGB_DATA_PIN_RED_3    14
+#define RGB_DATA_PIN_RED_4    0
 
-#define PHASE1B_TEMPLATE_COUNT 12
-#define PHASE1B_FRAME_HOLD_VSYNC 2
-#define TOUCH_BOX_HALF_SIZE 30
+/* ────────── UART ────────── */
+#define IMAGE_UART_PORT      UART_NUM_0
+#define IMAGE_UART_BAUD      3000000
+#define IMAGE_UART_RX_BUF    4096
+#define IMAGE_UART_TX_BUF    256
+#define IMAGE_MAGIC          0x21474D49  /* "IMG!" */
+#define IMAGE_MAX_JPEG_SIZE  (512 * 1024)
 
-#define RGB_DATA_PIN_BLUE_0 4
-#define RGB_DATA_PIN_BLUE_1 5
-#define RGB_DATA_PIN_BLUE_2 6
-#define RGB_DATA_PIN_BLUE_3 7
-#define RGB_DATA_PIN_BLUE_4 15
-#define RGB_DATA_PIN_GREEN_0 8
-#define RGB_DATA_PIN_GREEN_1 20
-#define RGB_DATA_PIN_GREEN_2 3
-#define RGB_DATA_PIN_GREEN_3 46
-#define RGB_DATA_PIN_GREEN_4 9
-#define RGB_DATA_PIN_GREEN_5 10
-#define RGB_DATA_PIN_RED_0 11
-#define RGB_DATA_PIN_RED_1 12
-#define RGB_DATA_PIN_RED_2 13
-#define RGB_DATA_PIN_RED_3 14
-#define RGB_DATA_PIN_RED_4 0
-
-typedef struct {
-    volatile uint8_t anim_phase;
-    volatile uint8_t anim_vsync_count;
-    volatile uint8_t touch_points;
-    volatile uint16_t touch_x[CONFIG_ESP_LCD_TOUCH_MAX_POINTS];
-    volatile uint16_t touch_y[CONFIG_ESP_LCD_TOUCH_MAX_POINTS];
-} runtime_state_t;
-
-static const char *TAG = "bootstrap";
-
-static runtime_state_t s_runtime;
-static esp_lcd_panel_handle_t s_panel_phase1a;
-static esp_lcd_panel_handle_t s_panel_phase1b;
-static uint16_t *s_phase1b_frames[PHASE1B_TEMPLATE_COUNT];
-
-static const uint16_t s_phase1a_palette[] = {
-    0xF800, 0x07E0, 0x001F, 0xFFE0,
-    0xF81F, 0x07FF, 0xFFFF, 0x0000,
-};
-
-static const uint8_t s_phase1b_wave[PHASE1B_TEMPLATE_COUNT] = {
-    0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1,
-};
-
-static const uint16_t s_touch_colors[GT911_MAX_CONTACTS] = {
-    0xF800, // red
-    0x07E0, // green
-    0x001F, // blue
-    0xFFE0, // yellow
-    0xF81F, // magenta
-};
-
+/* ────────── ST7701 init ────────── */
 static const st7701_lcd_init_cmd_t s_st7701_type9_init_ops[] = {
     {0xFF, (uint8_t[]){0x77, 0x01, 0x00, 0x00, 0x10}, 5, 0},
     {0xC0, (uint8_t[]){0x3B, 0x00}, 2, 0},
@@ -157,151 +114,18 @@ static const st7701_lcd_init_cmd_t s_st7701_type9_init_ops[] = {
     {0x29, NULL, 0, 0},
 };
 
+static const char *TAG = "image_disp";
+
+static esp_lcd_panel_handle_t s_panel;
+static uint16_t *s_image_fb;
+
+/* ────────── Helpers ────────── */
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b)
 {
     return (uint16_t)(((r & 0xF8U) << 8) | ((g & 0xFCU) << 3) | (b >> 3));
 }
 
-static inline int IRAM_ATTR line_from_pos(int pos_px)
-{
-    int line = 0;
-
-    while (pos_px >= LCD_H_RES) {
-        pos_px -= LCD_H_RES;
-        line++;
-    }
-
-    return line;
-}
-
-static inline void IRAM_ATTR copy_row_480(uint16_t *dst, const uint16_t *src)
-{
-    for (int i = 0; i < LCD_H_RES; i++) {
-        dst[i] = src[i];
-    }
-}
-
-static inline uint16_t phase1b_pixel_for_xy(int x, int y, int phase)
-{
-    uint16_t color;
-    int wave_a = s_phase1b_wave[phase];
-    int wave_b = s_phase1b_wave[(phase + (PHASE1B_TEMPLATE_COUNT / 3)) % PHASE1B_TEMPLATE_COUNT];
-    int dx_main = x - y;
-    int dx_anti = x - (LCD_H_RES - 1 - y);
-    int moving_x = x + (wave_a * 3);
-    int moving_y = y + (wave_b * 3);
-    int vertical_bar_x = 144 + (wave_a * 12);
-    int horizontal_bar_y = 144 + (wave_b * 12);
-    int cell;
-
-    if (dx_main < 0) {
-        dx_main = -dx_main;
-    }
-    if (dx_anti < 0) {
-        dx_anti = -dx_anti;
-    }
-    while (moving_x >= LCD_H_RES) {
-        moving_x -= LCD_H_RES;
-    }
-    while (moving_y >= LCD_V_RES) {
-        moving_y -= LCD_V_RES;
-    }
-    while (vertical_bar_x >= LCD_H_RES) {
-        vertical_bar_x -= LCD_H_RES;
-    }
-    while (horizontal_bar_y >= LCD_V_RES) {
-        horizontal_bar_y -= LCD_V_RES;
-    }
-
-    cell = ((moving_x / 48) ^ (moving_y / 48)) & 1;
-
-    if ((x < 6) || (x >= (LCD_H_RES - 6)) || (y < 6) || (y >= (LCD_V_RES - 6))) {
-        color = rgb565(255, 255, 255);
-    } else if (dx_main <= 2 || dx_anti <= 2) {
-        color = rgb565(255, 255, 255);
-    } else if ((x >= 236 && x <= 244) || (y >= 236 && y <= 244)) {
-        color = rgb565(255, 255, 255);
-    } else if ((x >= (vertical_bar_x - 10)) && (x <= (vertical_bar_x + 10))) {
-        color = rgb565(255, 32, 220);
-    } else if ((y >= (horizontal_bar_y - 10)) && (y <= (horizontal_bar_y + 10))) {
-        color = rgb565(32, 255, 255);
-    } else if (y < 240) {
-        color = (x < 240)
-                    ? (cell ? rgb565(255, 96, 96) : rgb565(120, 24, 24))
-                    : (cell ? rgb565(96, 255, 128) : rgb565(24, 120, 40));
-    } else {
-        color = (x < 240)
-                    ? (cell ? rgb565(96, 160, 255) : rgb565(24, 48, 120))
-                    : (cell ? rgb565(255, 224, 96) : rgb565(120, 96, 24));
-    }
-
-    return color;
-}
-
-static void prepare_phase1b_frames(void)
-{
-    size_t frame_size = LCD_H_RES * LCD_V_RES * LCD_BYTES_PER_PIXEL;
-
-    for (int phase = 0; phase < PHASE1B_TEMPLATE_COUNT; phase++) {
-        s_phase1b_frames[phase] = heap_caps_malloc(frame_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        ESP_ERROR_CHECK(s_phase1b_frames[phase] ? ESP_OK : ESP_ERR_NO_MEM);
-
-        for (int y = 0; y < LCD_V_RES; y++) {
-            uint16_t *row = s_phase1b_frames[phase] + (y * LCD_H_RES);
-            for (int x = 0; x < LCD_H_RES; x++) {
-                row[x] = phase1b_pixel_for_xy(x, y, phase);
-            }
-        }
-    }
-}
-
-static esp_err_t gt911_read_reg(uint16_t reg, uint8_t *data, size_t len)
-{
-    uint8_t reg_buf[2] = {(uint8_t)(reg >> 8), (uint8_t)(reg & 0xFF)};
-    return i2c_master_write_read_device(TOUCH_I2C_PORT, GT911_ADDR_PRIMARY, reg_buf, sizeof(reg_buf), data, len, pdMS_TO_TICKS(TOUCH_I2C_TIMEOUT_MS));
-}
-
-static esp_err_t gt911_write_reg8(uint16_t reg, uint8_t value)
-{
-    uint8_t buf[3] = {(uint8_t)(reg >> 8), (uint8_t)(reg & 0xFF), value};
-    return i2c_master_write_to_device(TOUCH_I2C_PORT, GT911_ADDR_PRIMARY, buf, sizeof(buf), pdMS_TO_TICKS(TOUCH_I2C_TIMEOUT_MS));
-}
-
-static bool gt911_product_id_looks_valid(const uint8_t *product_id, size_t len)
-{
-    bool any_nonzero = false;
-
-    for (size_t i = 0; i < len; i++) {
-        if (product_id[i] != 0x00) {
-            any_nonzero = true;
-        }
-        if ((product_id[i] < '0') || (product_id[i] > '9')) {
-            return false;
-        }
-    }
-
-    return any_nonzero;
-}
-
-static esp_err_t gt911_connect(void)
-{
-    uint8_t product_id[3] = {0};
-    uint8_t config_version = 0;
-    if (gt911_read_reg(GT911_REG_PRODUCT_ID, product_id, sizeof(product_id)) != ESP_OK) {
-        return ESP_FAIL;
-    }
-    if (gt911_read_reg(GT911_REG_CONFIG_VERSION, &config_version, 1) != ESP_OK) {
-        return ESP_FAIL;
-    }
-    if (!gt911_product_id_looks_valid(product_id, sizeof(product_id))) {
-        return ESP_FAIL;
-    }
-
-    ESP_LOGI(TAG, "GT911 addr=0x%02X product_id=%c%c%c config_version=%u",
-             GT911_ADDR_PRIMARY, product_id[0], product_id[1], product_id[2], config_version);
-    return ESP_OK;
-}
-
+/* ────────── Backlight ────────── */
 static void configure_backlight(void)
 {
     const ledc_timer_config_t timer_cfg = {
@@ -312,7 +136,6 @@ static void configure_backlight(void)
         .clk_cfg = LEDC_AUTO_CLK,
     };
     ESP_ERROR_CHECK(ledc_timer_config(&timer_cfg));
-
     const ledc_channel_config_t channel_cfg = {
         .gpio_num = LCD_PIN_BL,
         .speed_mode = LEDC_LOW_SPEED_MODE,
@@ -325,6 +148,7 @@ static void configure_backlight(void)
     ESP_ERROR_CHECK(ledc_channel_config(&channel_cfg));
 }
 
+/* ────────── Panel timing ────────── */
 static esp_lcd_rgb_timing_t make_panel_timing(void)
 {
     esp_lcd_rgb_timing_t timing = {
@@ -345,49 +169,10 @@ static esp_lcd_rgb_timing_t make_panel_timing(void)
             .pclk_idle_high = false,
         },
     };
-
     return timing;
 }
 
-static void fill_rect_rgb565(uint16_t *fb, int x0, int y0, int w, int h, uint16_t color)
-{
-    for (int y = 0; y < h; y++) {
-        uint16_t *row = fb + ((y0 + y) * LCD_H_RES) + x0;
-        for (int x = 0; x < w; x++) {
-            row[x] = color;
-        }
-    }
-}
-
-static void draw_phase1a_color_bars(uint16_t *fb)
-{
-    const int bar_width = LCD_H_RES / (int)(sizeof(s_phase1a_palette) / sizeof(s_phase1a_palette[0]));
-
-    for (int i = 0; i < (int)(sizeof(s_phase1a_palette) / sizeof(s_phase1a_palette[0])); i++) {
-        int x = i * bar_width;
-        int width = (i == ((int)(sizeof(s_phase1a_palette) / sizeof(s_phase1a_palette[0])) - 1)) ? (LCD_H_RES - x) : bar_width;
-        fill_rect_rgb565(fb, x, 0, width, LCD_V_RES, s_phase1a_palette[i]);
-    }
-}
-
-static void draw_phase1a_test_pattern(esp_lcd_panel_handle_t panel)
-{
-    uint16_t *frame = heap_caps_malloc(LCD_H_RES * LCD_V_RES * LCD_BYTES_PER_PIXEL, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    ESP_ERROR_CHECK(frame ? ESP_OK : ESP_ERR_NO_MEM);
-
-    for (int i = 0; i < LCD_H_RES * LCD_V_RES; i++) {
-        frame[i] = 0x001F;
-    }
-    ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel, 0, 0, LCD_H_RES, LCD_V_RES, frame));
-    vTaskDelay(pdMS_TO_TICKS(PHASE1A_SOLID_MS));
-
-    draw_phase1a_color_bars(frame);
-    ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel, 0, 0, LCD_H_RES, LCD_V_RES, frame));
-    vTaskDelay(pdMS_TO_TICKS(PHASE1A_BARS_MS));
-
-    free(frame);
-}
-
+/* ────────── ST7701 SPI I/O ────────── */
 static esp_lcd_panel_io_handle_t new_st7701_io(void)
 {
     spi_line_config_t line_config = {
@@ -399,12 +184,14 @@ static esp_lcd_panel_io_handle_t new_st7701_io(void)
         .sda_gpio_num = LCD_PIN_SPI_SDA,
         .io_expander = NULL,
     };
-    esp_lcd_panel_io_3wire_spi_config_t io_config = ST7701_PANEL_IO_3WIRE_SPI_CONFIG(line_config, 0);
+    esp_lcd_panel_io_3wire_spi_config_t io_config =
+        ST7701_PANEL_IO_3WIRE_SPI_CONFIG(line_config, 0);
     esp_lcd_panel_io_handle_t io_handle = NULL;
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_3wire_spi(&io_config, &io_handle));
     return io_handle;
 }
 
+/* ────────── RGB panel config ────────── */
 static esp_lcd_rgb_panel_config_t make_rgb_config(bool no_fb)
 {
     esp_lcd_rgb_panel_config_t rgb_config = {
@@ -414,7 +201,7 @@ static esp_lcd_rgb_panel_config_t make_rgb_config(bool no_fb)
         .in_color_format = LCD_COLOR_FMT_RGB565,
         .out_color_format = LCD_COLOR_FMT_RGB565,
         .num_fbs = no_fb ? 0 : 1,
-        .bounce_buffer_size_px = no_fb ? LCD_BOUNCE_PIXELS : 0,
+        .bounce_buffer_size_px = no_fb ? (LCD_H_RES * 10) : 0,
         .dma_burst_size = 64,
         .hsync_gpio_num = LCD_PIN_HSYNC,
         .vsync_gpio_num = LCD_PIN_VSYNC,
@@ -422,21 +209,14 @@ static esp_lcd_rgb_panel_config_t make_rgb_config(bool no_fb)
         .pclk_gpio_num = LCD_PIN_PCLK,
         .disp_gpio_num = -1,
         .data_gpio_nums = {
-            RGB_DATA_PIN_BLUE_0,
-            RGB_DATA_PIN_BLUE_1,
-            RGB_DATA_PIN_BLUE_2,
-            RGB_DATA_PIN_BLUE_3,
+            RGB_DATA_PIN_BLUE_0,  RGB_DATA_PIN_BLUE_1,
+            RGB_DATA_PIN_BLUE_2,  RGB_DATA_PIN_BLUE_3,
             RGB_DATA_PIN_BLUE_4,
-            RGB_DATA_PIN_GREEN_0,
-            RGB_DATA_PIN_GREEN_1,
-            RGB_DATA_PIN_GREEN_2,
-            RGB_DATA_PIN_GREEN_3,
-            RGB_DATA_PIN_GREEN_4,
-            RGB_DATA_PIN_GREEN_5,
-            RGB_DATA_PIN_RED_0,
-            RGB_DATA_PIN_RED_1,
-            RGB_DATA_PIN_RED_2,
-            RGB_DATA_PIN_RED_3,
+            RGB_DATA_PIN_GREEN_0, RGB_DATA_PIN_GREEN_1,
+            RGB_DATA_PIN_GREEN_2, RGB_DATA_PIN_GREEN_3,
+            RGB_DATA_PIN_GREEN_4, RGB_DATA_PIN_GREEN_5,
+            RGB_DATA_PIN_RED_0,   RGB_DATA_PIN_RED_1,
+            RGB_DATA_PIN_RED_2,   RGB_DATA_PIN_RED_3,
             RGB_DATA_PIN_RED_4,
         },
         .flags = {
@@ -444,21 +224,20 @@ static esp_lcd_rgb_panel_config_t make_rgb_config(bool no_fb)
             .no_fb = no_fb ? 1 : 0,
         },
     };
-
     return rgb_config;
 }
 
-static esp_lcd_panel_handle_t new_st7701_panel_with_fb(void)
+/* ────────── Panel init ────────── */
+static esp_lcd_panel_handle_t init_panel_with_fb(void)
 {
     esp_lcd_panel_io_handle_t io_handle = new_st7701_io();
     esp_lcd_rgb_panel_config_t rgb_config = make_rgb_config(false);
     st7701_vendor_config_t vendor_config = {
         .rgb_config = &rgb_config,
         .init_cmds = s_st7701_type9_init_ops,
-        .init_cmds_size = sizeof(s_st7701_type9_init_ops) / sizeof(s_st7701_type9_init_ops[0]),
-        .flags = {
-            .mirror_by_cmd = 1,
-        },
+        .init_cmds_size = sizeof(s_st7701_type9_init_ops) /
+                          sizeof(s_st7701_type9_init_ops[0]),
+        .flags = { .mirror_by_cmd = 1 },
     };
     const esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = -1,
@@ -466,215 +245,211 @@ static esp_lcd_panel_handle_t new_st7701_panel_with_fb(void)
         .bits_per_pixel = LCD_BITS_PER_PIXEL,
         .vendor_config = &vendor_config,
     };
-
     esp_lcd_panel_handle_t panel = NULL;
     ESP_ERROR_CHECK(esp_lcd_new_panel_st7701(io_handle, &panel_config, &panel));
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel, true));
-
     return panel;
 }
 
-static IRAM_ATTR bool panel_on_vsync(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t *edata, void *user_ctx)
+/* ────────── Waiting screen ────────── */
+static void draw_waiting_screen(esp_lcd_panel_handle_t panel)
 {
-    runtime_state_t *state = (runtime_state_t *)user_ctx;
-
-    (void)panel;
-    (void)edata;
-
-    state->anim_vsync_count++;
-    if (state->anim_vsync_count >= PHASE1B_FRAME_HOLD_VSYNC) {
-        state->anim_vsync_count = 0;
-        state->anim_phase++;
-        if (state->anim_phase >= PHASE1B_TEMPLATE_COUNT) {
-            state->anim_phase = 0;
+    uint16_t *fb = heap_caps_malloc(LCD_FB_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    ESP_ERROR_CHECK(fb ? ESP_OK : ESP_ERR_NO_MEM);
+    for (int y = 0; y < LCD_V_RES; y++) {
+        for (int x = 0; x < LCD_H_RES; x++) {
+            uint8_t r = (uint8_t)((x * 255) / LCD_H_RES);
+            uint8_t g = (uint8_t)((y * 255) / LCD_V_RES);
+            fb[y * LCD_H_RES + x] = rgb565(r, g, 64);
         }
     }
-
-    return false;
+    for (int x = 0; x < LCD_H_RES; x++) {
+        fb[0 * LCD_H_RES + x] = 0xFFFF;
+        fb[(LCD_V_RES - 1) * LCD_H_RES + x] = 0xFFFF;
+    }
+    for (int y = 0; y < LCD_V_RES; y++) {
+        fb[y * LCD_H_RES + 0] = 0xFFFF;
+        fb[y * LCD_H_RES + (LCD_H_RES - 1)] = 0xFFFF;
+    }
+    int bx = 140, by = 210, bw = 200, bh = 60;
+    for (int y = by; y < by + bh; y++) {
+        for (int x = bx; x < bx + bw; x++) {
+            fb[y * LCD_H_RES + x] = (x == bx || x == bx + bw - 1 ||
+                                     y == by || y == by + bh - 1) ? 0xFFFF : 0x0000;
+        }
+    }
+    ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel, 0, 0, LCD_H_RES, LCD_V_RES, fb));
+    free(fb);
 }
 
-static IRAM_ATTR bool panel_on_bounce_empty(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px, int len_bytes, void *user_ctx)
+/* ────────── Display image ────────── */
+static void display_image(esp_lcd_panel_handle_t panel, const uint16_t *pixels,
+                          int img_w, int img_h)
 {
-    runtime_state_t *state = (runtime_state_t *)user_ctx;
-    uint16_t *dst = (uint16_t *)bounce_buf;
-    const uint16_t *frame = s_phase1b_frames[state->anim_phase];
-    const int lines = len_bytes / (LCD_BYTES_PER_PIXEL * LCD_H_RES);
-    const int start_line = line_from_pos(pos_px);
-    const uint8_t touch_points = state->touch_points;
+    if (img_w == LCD_H_RES && img_h == LCD_V_RES) {
+        ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel, 0, 0,
+                          LCD_H_RES, LCD_V_RES, pixels));
+        return;
+    }
+    uint16_t *fb = heap_caps_malloc(LCD_FB_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!fb) return;
+    memset(fb, 0, LCD_FB_SIZE);
+    int off_x = (LCD_H_RES - img_w) / 2;
+    int off_y = (LCD_V_RES - img_h) / 2;
+    if (off_x < 0) off_x = 0;
+    if (off_y < 0) off_y = 0;
+    int copy_w = (img_w > LCD_H_RES) ? LCD_H_RES : img_w;
+    int copy_h = (img_h > LCD_V_RES) ? LCD_V_RES : img_h;
+    for (int y = 0; y < copy_h; y++) {
+        memcpy(fb + ((off_y + y) * LCD_H_RES) + off_x,
+               pixels + (y * img_w), copy_w * sizeof(uint16_t));
+    }
+    ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel, 0, 0, LCD_H_RES, LCD_V_RES, fb));
+    free(fb);
+}
 
-    (void)panel;
+/* ────────── UART helpers ────────── */
+static esp_err_t uart_read_exact(uint8_t *buf, size_t len, TickType_t timeout)
+{
+    size_t total = 0;
+    TickType_t start = xTaskGetTickCount();
+    while (total < len) {
+        TickType_t elapsed = xTaskGetTickCount() - start;
+        TickType_t remaining = (timeout == portMAX_DELAY) ? portMAX_DELAY
+                               : (elapsed >= timeout) ? 0 : (timeout - elapsed);
+        if (remaining == 0 && timeout != portMAX_DELAY) return ESP_ERR_TIMEOUT;
+        int rx = uart_read_bytes(IMAGE_UART_PORT, buf + total, len - total, remaining);
+        if (rx < 0) return ESP_FAIL;
+        total += rx;
+    }
+    return ESP_OK;
+}
 
-    for (int row = 0; row < lines; row++) {
-        uint16_t *row_dst = dst + (row * LCD_H_RES);
-        int y = start_line + row;
+/* ────────── Decode + display ────────── */
+static esp_err_t decode_and_display(const uint8_t *jpeg_data, size_t jpeg_size)
+{
+    int64_t t_start = esp_timer_get_time();
+    if (s_image_fb) { free(s_image_fb); s_image_fb = NULL; }
+    s_image_fb = heap_caps_malloc(LCD_FB_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_image_fb) return ESP_ERR_NO_MEM;
 
-        if (y >= LCD_V_RES) {
-            y -= LCD_V_RES;
-        }
+    esp_jpeg_image_cfg_t jpeg_cfg = {
+        .indata = (uint8_t *)jpeg_data,
+        .indata_size = (uint32_t)jpeg_size,
+        .outbuf = (uint8_t *)s_image_fb,
+        .outbuf_size = LCD_FB_SIZE,
+        .out_format = JPEG_IMAGE_FORMAT_RGB565,
+        .out_scale = JPEG_IMAGE_SCALE_0,
+        .flags = { .swap_color_bytes = 0 },
+    };
+    esp_jpeg_image_output_t outimg;
+    esp_err_t ret = esp_jpeg_decode(&jpeg_cfg, &outimg);
+    int64_t t_decoded = esp_timer_get_time();
+    if (ret != ESP_OK) { free(s_image_fb); s_image_fb = NULL; return ret; }
 
-        copy_row_480(row_dst, frame + (y * LCD_H_RES));
+    display_image(s_panel, s_image_fb, outimg.width, outimg.height);
+    int64_t t_displayed = esp_timer_get_time();
 
-        for (uint8_t point = 0; point < touch_points; point++) {
-            int touch_x = state->touch_x[point];
-            int touch_y = state->touch_y[point];
-            uint16_t touch_color = s_touch_colors[point % GT911_MAX_CONTACTS];
-            int box_left = touch_x - TOUCH_BOX_HALF_SIZE;
-            int box_right = touch_x + TOUCH_BOX_HALF_SIZE;
-            int box_top = touch_y - TOUCH_BOX_HALF_SIZE;
-            int box_bottom = touch_y + TOUCH_BOX_HALF_SIZE;
+    char ack[64];
+    int ack_len = snprintf(ack, sizeof(ack), "OK %lld %lld\n",
+                           (long long)(t_decoded - t_start),
+                           (long long)(t_displayed - t_decoded));
+    uart_write_bytes(IMAGE_UART_PORT, ack, ack_len);
+    return ESP_OK;
+}
 
-            if (box_left < 0) {
-                box_left = 0;
-            }
-            if (box_right >= LCD_H_RES) {
-                box_right = LCD_H_RES - 1;
-            }
-            if (box_top < 0) {
-                box_top = 0;
-            }
-            if (box_bottom >= LCD_V_RES) {
-                box_bottom = LCD_V_RES - 1;
-            }
+/* ────────── Receive one image ────────── */
+static esp_err_t receive_and_display_image(void)
+{
+    uint8_t header[8];
+    esp_err_t ret = uart_read_exact(header, sizeof(header), portMAX_DELAY);
+    if (ret != ESP_OK) return ret;
+    uint32_t magic = (uint32_t)header[0] | ((uint32_t)header[1] << 8) |
+                     ((uint32_t)header[2] << 16) | ((uint32_t)header[3] << 24);
+    uint32_t jpeg_size = (uint32_t)header[4] | ((uint32_t)header[5] << 8) |
+                         ((uint32_t)header[6] << 16) | ((uint32_t)header[7] << 24);
+    if (magic != IMAGE_MAGIC) { ESP_LOGW(TAG, "Bad magic"); return ESP_ERR_INVALID_ARG; }
+    if (jpeg_size == 0 || jpeg_size > IMAGE_MAX_JPEG_SIZE) {
+        ESP_LOGW(TAG, "Bad size %lu", jpeg_size); return ESP_ERR_INVALID_SIZE;
+    }
+    uint8_t *jpeg_buf = heap_caps_malloc(jpeg_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!jpeg_buf) return ESP_ERR_NO_MEM;
+    ret = uart_read_exact(jpeg_buf, jpeg_size, pdMS_TO_TICKS(30000));
+    if (ret != ESP_OK) { free(jpeg_buf); return ret; }
+    ret = decode_and_display(jpeg_buf, jpeg_size);
+    free(jpeg_buf);
+    return ret;
+}
 
-            if ((y < box_top) || (y > box_bottom)) {
-                continue;
-            }
-
-            for (int x = box_left; x <= box_right; x++) {
-                row_dst[x] = touch_color;
+/* ────────── Re-sync helper ────────── */
+static void resync_stream(void)
+{
+    ESP_LOGW(TAG, "Re-syncing...");
+    uint8_t byte;
+    while (1) {
+        if (uart_read_bytes(IMAGE_UART_PORT, &byte, 1, pdMS_TO_TICKS(200)) == 1 && byte == 'I') {
+            uint8_t peek[3];
+            if (uart_read_bytes(IMAGE_UART_PORT, peek, 3, pdMS_TO_TICKS(500)) == 3 &&
+                peek[0] == 'M' && peek[1] == 'G' && peek[2] == '!') {
+                uint8_t size_buf[4];
+                if (uart_read_exact(size_buf, 4, pdMS_TO_TICKS(2000)) == ESP_OK) {
+                    uint32_t jpeg_size = (uint32_t)size_buf[0] |
+                        ((uint32_t)size_buf[1] << 8) | ((uint32_t)size_buf[2] << 16) |
+                        ((uint32_t)size_buf[3] << 24);
+                    if (jpeg_size > 0 && jpeg_size <= IMAGE_MAX_JPEG_SIZE) {
+                        uint8_t *jpeg_buf = heap_caps_malloc(jpeg_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                        if (jpeg_buf) {
+                            if (uart_read_exact(jpeg_buf, jpeg_size, pdMS_TO_TICKS(30000)) == ESP_OK)
+                                decode_and_display(jpeg_buf, jpeg_size);
+                            free(jpeg_buf);
+                        }
+                    }
+                }
+                return;
             }
         }
     }
-
-    return false;
 }
 
-static esp_lcd_panel_handle_t new_rgb_panel_no_fb(void)
-{
-    esp_lcd_rgb_panel_config_t rgb_config = make_rgb_config(true);
-    esp_lcd_panel_handle_t panel = NULL;
-
-    ESP_ERROR_CHECK(esp_lcd_new_rgb_panel(&rgb_config, &panel));
-
-    const esp_lcd_rgb_panel_event_callbacks_t callbacks = {
-        .on_vsync = panel_on_vsync,
-        .on_bounce_empty = panel_on_bounce_empty,
-    };
-    ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(panel, &callbacks, &s_runtime));
-
-    return panel;
-}
-
-static void send_st7701_init_only(void)
-{
-    esp_lcd_panel_io_handle_t io_handle = new_st7701_io();
-    esp_lcd_rgb_panel_config_t rgb_config = make_rgb_config(true);
-    st7701_vendor_config_t vendor_config = {
-        .rgb_config = &rgb_config,
-        .init_cmds = s_st7701_type9_init_ops,
-        .init_cmds_size = sizeof(s_st7701_type9_init_ops) / sizeof(s_st7701_type9_init_ops[0]),
-        .flags = {
-            .enable_io_multiplex = 1,
-        },
-    };
-    const esp_lcd_panel_dev_config_t panel_config = {
-        .reset_gpio_num = -1,
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
-        .bits_per_pixel = LCD_BITS_PER_PIXEL,
-        .vendor_config = &vendor_config,
-    };
-
-    esp_lcd_panel_handle_t panel = NULL;
-    ESP_ERROR_CHECK(esp_lcd_new_panel_st7701(io_handle, &panel_config, &panel));
-    ESP_ERROR_CHECK(esp_lcd_panel_reset(panel));
-    ESP_ERROR_CHECK(esp_lcd_panel_init(panel));
-    ESP_ERROR_CHECK(esp_lcd_panel_del(panel));
-}
-
-static void init_touch(void)
-{
-    const i2c_config_t i2c_conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = TOUCH_PIN_SDA,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = TOUCH_PIN_SCL,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = TOUCH_I2C_SPEED_HZ,
-    };
-    ESP_ERROR_CHECK(i2c_param_config(TOUCH_I2C_PORT, &i2c_conf));
-    ESP_ERROR_CHECK(i2c_driver_install(TOUCH_I2C_PORT, i2c_conf.mode, 0, 0, 0));
-
-    ESP_ERROR_CHECK(gt911_connect());
-}
-
-static void touch_task(void *arg)
+/* ────────── Receiver task ────────── */
+static void image_receiver_task(void *arg)
 {
     (void)arg;
-
-    while (true) {
-        uint8_t point_info = 0;
-        uint8_t point_buf[GT911_MAX_CONTACTS * 8] = {0};
-        uint8_t count = 0;
-
-        if (gt911_read_reg(GT911_REG_POINT_INFO, &point_info, 1) == ESP_OK) {
-            if ((point_info & 0x80U) && ((point_info & 0x0FU) > 0U)) {
-                count = point_info & 0x0FU;
-                if (count > GT911_MAX_CONTACTS) {
-                    count = GT911_MAX_CONTACTS;
-                }
-                if (count > CONFIG_ESP_LCD_TOUCH_MAX_POINTS) {
-                    count = CONFIG_ESP_LCD_TOUCH_MAX_POINTS;
-                }
-
-                if (gt911_read_reg(GT911_REG_POINT_1, point_buf, count * 8) == ESP_OK) {
-                    for (uint8_t i = 0; i < count; i++) {
-                        uint16_t x = (uint16_t)point_buf[(i * 8) + 1] | ((uint16_t)point_buf[(i * 8) + 2] << 8);
-                        uint16_t y = (uint16_t)point_buf[(i * 8) + 3] | ((uint16_t)point_buf[(i * 8) + 4] << 8);
-
-                        s_runtime.touch_x[i] = (x < LCD_H_RES) ? x : (LCD_H_RES - 1);
-                        s_runtime.touch_y[i] = (y < LCD_V_RES) ? y : (LCD_V_RES - 1);
-                    }
-                    s_runtime.touch_points = count;
-                } else {
-                    s_runtime.touch_points = 0;
-                }
-            } else {
-                s_runtime.touch_points = 0;
-            }
-
-            ESP_ERROR_CHECK(gt911_write_reg8(GT911_REG_POINT_INFO, 0));
-        } else {
-            s_runtime.touch_points = 0;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(TOUCH_POLL_MS));
+    while (1) {
+        esp_err_t ret = receive_and_display_image();
+        if (ret == ESP_ERR_INVALID_ARG || ret == ESP_ERR_INVALID_SIZE)
+            resync_stream();
+        else if (ret != ESP_OK)
+            vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
+/* ────────── Main ────────── */
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Bootstrapping Guition ESP32-S3-4848S040");
+    ESP_LOGI(TAG, "=== Image Display Firmware ===");
     configure_backlight();
+    ESP_LOGI(TAG, "Init ST7701...");
+    s_panel = init_panel_with_fb();
+    draw_waiting_screen(s_panel);
 
-    ESP_LOGI(TAG, "Phase 1a: ST7701 framebuffer validation");
-    s_panel_phase1a = new_st7701_panel_with_fb();
-    draw_phase1a_test_pattern(s_panel_phase1a);
+    const uart_config_t uart_cfg = {
+        .baud_rate = IMAGE_UART_BAUD,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    ESP_ERROR_CHECK(uart_driver_install(IMAGE_UART_PORT, IMAGE_UART_RX_BUF,
+                                        IMAGE_UART_TX_BUF, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_param_config(IMAGE_UART_PORT, &uart_cfg));
+    ESP_ERROR_CHECK(uart_set_pin(IMAGE_UART_PORT, UART_PIN_NO_CHANGE,
+                                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE,
+                                 UART_PIN_NO_CHANGE));
 
-    ESP_LOGI(TAG, "Phase 1b: bounce-buffer-only procedural rendering");
-    ESP_ERROR_CHECK(esp_lcd_panel_del(s_panel_phase1a));
-    s_panel_phase1a = NULL;
-
-    prepare_phase1b_frames();
-    send_st7701_init_only();
-    s_panel_phase1b = new_rgb_panel_no_fb();
-    ESP_ERROR_CHECK(esp_lcd_panel_reset(s_panel_phase1b));
-    ESP_ERROR_CHECK(esp_lcd_panel_init(s_panel_phase1b));
-    ESP_LOGI(TAG, "Phase 1b active with animated background");
-
-    ESP_LOGI(TAG, "Phase 2: GT911 touch overlay");
-    init_touch();
-    xTaskCreate(touch_task, "touch_task", 4096, NULL, 5, NULL);
-    ESP_LOGI(TAG, "Touch active; drawing crosses for up to %d contacts", CONFIG_ESP_LCD_TOUCH_MAX_POINTS);
+    xTaskCreate(image_receiver_task, "img_rx", 8192, NULL, 5, NULL);
+    ESP_LOGI(TAG, "Ready.");
 }
