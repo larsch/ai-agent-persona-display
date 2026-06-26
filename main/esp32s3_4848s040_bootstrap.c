@@ -41,7 +41,7 @@
 #define LCD_PIN_SPI_SCL 48
 #define LCD_PIN_SPI_SDA 47
 #define LCD_PIN_BL      38
-#define LCD_PCLK_HZ (12 * 1000 * 1000)
+#define LCD_PCLK_HZ (10 * 1000 * 1000)
 
 #define RGB_DATA_PIN_BLUE_0   4
 #define RGB_DATA_PIN_BLUE_1   5
@@ -117,7 +117,7 @@ static const st7701_lcd_init_cmd_t s_st7701_type9_init_ops[] = {
 static const char *TAG = "image_disp";
 
 static esp_lcd_panel_handle_t s_panel;
-static uint16_t *s_image_fb;
+static uint16_t *s_image_fb;   /* decode buffer — driver copies from this into its VSYNC-swapped double FB */
 static JPEGIMAGE s_jpeg_img; /* ~17KB — must NOT be on the stack */
 
 /* ────────── Helpers ────────── */
@@ -201,7 +201,7 @@ static esp_lcd_rgb_panel_config_t make_rgb_config(bool no_fb)
         .data_width = 16,
         .in_color_format = LCD_COLOR_FMT_RGB565,
         .out_color_format = LCD_COLOR_FMT_RGB565,
-        .num_fbs = no_fb ? 0 : 1,
+        .num_fbs = 2,
         .bounce_buffer_size_px = no_fb ? (LCD_H_RES * 10) : 0,
         .dma_burst_size = 64,
         .hsync_gpio_num = LCD_PIN_HSYNC,
@@ -344,25 +344,17 @@ static int jpeg_draw_callback(JPEGDRAW *pDraw)
 static esp_err_t decode_and_display(const uint8_t *jpeg_data, size_t jpeg_size)
 {
     int64_t t_start = esp_timer_get_time();
-    if (s_image_fb) { free(s_image_fb); s_image_fb = NULL; }
-    s_image_fb = heap_caps_malloc(LCD_FB_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!s_image_fb) return ESP_ERR_NO_MEM;
 
     if (!JPEG_openRAM(&s_jpeg_img, (uint8_t *)jpeg_data, (int)jpeg_size,
                       jpeg_draw_callback)) {
-        free(s_image_fb); s_image_fb = NULL;
         return ESP_FAIL;
     }
-    /* The default pixel type is RGB565 little-endian; ST7701 in 16-bit
-       RGB mode typically expects big-endian, but the ESP LCD driver
-       handles the byte order internally via the RGB element order.
-       We use the default (LE) and let the panel driver do its work. */
     int width = JPEG_getWidth(&s_jpeg_img);
     int height = JPEG_getHeight(&s_jpeg_img);
 
     if (!JPEG_decode(&s_jpeg_img, 0, 0, 0)) {
         JPEG_close(&s_jpeg_img);
-        free(s_image_fb); s_image_fb = NULL;
         return ESP_FAIL;
     }
     JPEG_close(&s_jpeg_img);
@@ -370,6 +362,7 @@ static esp_err_t decode_and_display(const uint8_t *jpeg_data, size_t jpeg_size)
     int64_t t_decoded = esp_timer_get_time();
 
     display_image(s_panel, s_image_fb, width, height);
+
     int64_t t_displayed = esp_timer_get_time();
 
     char ack[64];
@@ -453,6 +446,8 @@ void app_main(void)
     configure_backlight();
     ESP_LOGI(TAG, "Init ST7701...");
     s_panel = init_panel_with_fb();
+    s_image_fb = heap_caps_malloc(LCD_FB_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    ESP_ERROR_CHECK(s_image_fb ? ESP_OK : ESP_ERR_NO_MEM);
     draw_waiting_screen(s_panel);
 
     const uart_config_t uart_cfg = {
