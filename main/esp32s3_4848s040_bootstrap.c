@@ -201,7 +201,7 @@ static esp_lcd_rgb_panel_config_t make_rgb_config(bool no_fb)
         .data_width = 16,
         .in_color_format = LCD_COLOR_FMT_RGB565,
         .out_color_format = LCD_COLOR_FMT_RGB565,
-        .num_fbs = 2,
+        .num_fbs = 1,
         .bounce_buffer_size_px = no_fb ? (LCD_H_RES * 10) : 0,
         .dma_burst_size = 64,
         .hsync_gpio_num = LCD_PIN_HSYNC,
