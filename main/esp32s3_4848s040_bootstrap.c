@@ -24,7 +24,7 @@
 #include "esp_rom_sys.h"
 #include "esp_timer.h"
 
-#include "jpeg_decoder.h"
+#include "JPEGDEC.h"
 
 /* ────────── Display ────────── */
 #define LCD_H_RES 480
@@ -118,6 +118,7 @@ static const char *TAG = "image_disp";
 
 static esp_lcd_panel_handle_t s_panel;
 static uint16_t *s_image_fb;
+static JPEGIMAGE s_jpeg_img; /* ~17KB — must NOT be on the stack */
 
 /* ────────── Helpers ────────── */
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b)
@@ -327,6 +328,18 @@ static esp_err_t uart_read_exact(uint8_t *buf, size_t len, TickType_t timeout)
     return ESP_OK;
 }
 
+/* ────────── JPEGDEC draw callback ────────── */
+static int jpeg_draw_callback(JPEGDRAW *pDraw)
+{
+    uint16_t *dest = s_image_fb + (pDraw->y * LCD_H_RES) + pDraw->x;
+    for (int row = 0; row < pDraw->iHeight; row++) {
+        memcpy(dest + row * LCD_H_RES,
+               pDraw->pPixels + row * pDraw->iWidth,
+               pDraw->iWidth * sizeof(uint16_t));
+    }
+    return 1; /* continue decoding */
+}
+
 /* ────────── Decode + display ────────── */
 static esp_err_t decode_and_display(const uint8_t *jpeg_data, size_t jpeg_size)
 {
@@ -335,21 +348,28 @@ static esp_err_t decode_and_display(const uint8_t *jpeg_data, size_t jpeg_size)
     s_image_fb = heap_caps_malloc(LCD_FB_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!s_image_fb) return ESP_ERR_NO_MEM;
 
-    esp_jpeg_image_cfg_t jpeg_cfg = {
-        .indata = (uint8_t *)jpeg_data,
-        .indata_size = (uint32_t)jpeg_size,
-        .outbuf = (uint8_t *)s_image_fb,
-        .outbuf_size = LCD_FB_SIZE,
-        .out_format = JPEG_IMAGE_FORMAT_RGB565,
-        .out_scale = JPEG_IMAGE_SCALE_0,
-        .flags = { .swap_color_bytes = 0 },
-    };
-    esp_jpeg_image_output_t outimg;
-    esp_err_t ret = esp_jpeg_decode(&jpeg_cfg, &outimg);
-    int64_t t_decoded = esp_timer_get_time();
-    if (ret != ESP_OK) { free(s_image_fb); s_image_fb = NULL; return ret; }
+    if (!JPEG_openRAM(&s_jpeg_img, (uint8_t *)jpeg_data, (int)jpeg_size,
+                      jpeg_draw_callback)) {
+        free(s_image_fb); s_image_fb = NULL;
+        return ESP_FAIL;
+    }
+    /* The default pixel type is RGB565 little-endian; ST7701 in 16-bit
+       RGB mode typically expects big-endian, but the ESP LCD driver
+       handles the byte order internally via the RGB element order.
+       We use the default (LE) and let the panel driver do its work. */
+    int width = JPEG_getWidth(&s_jpeg_img);
+    int height = JPEG_getHeight(&s_jpeg_img);
 
-    display_image(s_panel, s_image_fb, outimg.width, outimg.height);
+    if (!JPEG_decode(&s_jpeg_img, 0, 0, 0)) {
+        JPEG_close(&s_jpeg_img);
+        free(s_image_fb); s_image_fb = NULL;
+        return ESP_FAIL;
+    }
+    JPEG_close(&s_jpeg_img);
+
+    int64_t t_decoded = esp_timer_get_time();
+
+    display_image(s_panel, s_image_fb, width, height);
     int64_t t_displayed = esp_timer_get_time();
 
     char ack[64];
@@ -450,6 +470,6 @@ void app_main(void)
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE,
                                  UART_PIN_NO_CHANGE));
 
-    xTaskCreate(image_receiver_task, "img_rx", 8192, NULL, 5, NULL);
+    xTaskCreate(image_receiver_task, "img_rx", 24576, NULL, 5, NULL);
     ESP_LOGI(TAG, "Ready.");
 }

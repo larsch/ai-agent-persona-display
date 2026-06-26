@@ -1,0 +1,7 @@
+version: "0.1.0"
+description: "JPEGDEC - SIMD-accelerated JPEG decoder for ESP32-S3"
+dependencies:
+  espressif/esp-dsp:
+    version: '*'
+  idf:
+    version: '>=5.0'

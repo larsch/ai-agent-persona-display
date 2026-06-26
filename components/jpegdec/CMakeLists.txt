@@ -1,0 +1,10 @@
+set(srcs
+    "src/JPEGDEC.cpp"
+    "src/s3_simd_420.S"
+    "src/s3_simd_444.S"
+    "src/s3_simd_dequant.S"
+)
+idf_component_register(SRCS ${srcs}
+                    REQUIRES esp-dsp
+                    INCLUDE_DIRS "src"
+)

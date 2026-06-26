@@ -5,4 +5,4 @@ dependencies:
   espressif/esp_lcd_st7701: '*'
   espressif/esp_lcd_panel_io_additions: '*'
   espressif/esp_lcd_touch_gt911: '*'
-  esp_jpeg: '>=1.0.2'
+  espressif/esp-dsp: '*'
