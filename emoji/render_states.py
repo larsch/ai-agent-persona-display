@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Render emoji state images using ImageMagick pango + Noto Color Emoji COLRv1.
+"""Render emoji state images using ImageMagick pango + Noto Color Emoji font.
 
 Reads states.json for the list of images to render, plus JPEG quality.
 Images without a "render" entry are skipped (sourced externally).
 
-Requires: ImageMagick, Pillow, Noto-COLRv1.ttf installed to ~/.local/share/fonts/
+Uses a temporary fontconfig to load the font from a file path rather than
+relying on system-wide font installation. The font family name is detected
+automatically from the .ttf file.
+
+Requires: ImageMagick, Pillow, Noto Color Emoji .ttf file
 """
 
 import argparse
@@ -16,7 +20,8 @@ from PIL import Image
 
 from states_model import load_states
 
-STATES_DIR = os.path.expanduser("~/prj/emoji/states")
+DEFAULT_FONT = os.path.expanduser("~/.local/share/fonts/Noto-COLRv1.ttf")
+STATES_DIR = os.path.join(os.path.dirname(__file__), "states")
 CANVAS_SIZE = 480
 FACE_SIZE = 320   # max dimension after trim+resize
 AUX_SIZE = 150    # max dimension after trim+resize
@@ -26,16 +31,62 @@ BLACK = (0, 0, 0, 255)
 FACE_PANGO = 280000
 AUX_PANGO = 135000
 
+# Cached font family name and temporary fontconfig path (keyed by font path)
+_font_cache: dict[str, tuple[str, str]] = {}
 
-def render_pango(emoji: str, size: int) -> Image.Image:
-    """Render a single emoji via ImageMagick pango, return PIL Image (RGBA)."""
-    markup = f'<span font="Noto Color Emoji" size="{size}">{emoji}</span>'
+
+def _detect_family(font_path: str) -> str:
+    """Return the font family name from the .ttf file using fc-scan."""
+    result = subprocess.run(
+        ["fc-scan", "--format=%{family}", font_path],
+        check=True, capture_output=True, text=True,
+    )
+    # fc-scan may return comma-separated families; take the first.
+    return result.stdout.strip().split(",")[0]
+
+
+def _setup_fontconfig(font_path: str) -> str:
+    """Create a temporary fontconfig XML that points to the font's directory.
+
+    Returns the path to the temp config file.
+    """
+    font_dir = os.path.dirname(os.path.abspath(font_path))
+    xml = f'<?xml version="1.0"?>\n' \
+          f'<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n' \
+          f'<fontconfig><dir>{font_dir}</dir></fontconfig>\n'
+
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".conf", prefix="fc_", delete=False,
+    )
+    tmp.write(xml)
+    tmp.close()
+    return tmp.name
+
+
+def _get_font_info(font_path: str) -> tuple[str, str]:
+    """Get (family_name, fontconfig_path) for a font, caching results."""
+    if font_path not in _font_cache:
+        family = _detect_family(font_path)
+        fc_config = _setup_fontconfig(font_path)
+        _font_cache[font_path] = (family, fc_config)
+    return _font_cache[font_path]
+
+
+def render_pango(emoji: str, size: int, font_path: str) -> Image.Image:
+    """Render a single emoji via ImageMagick pango, return PIL Image (RGBA).
+
+    Loads the font from *font_path* by setting FONTCONFIG_FILE to a temporary
+    config that includes only the font's directory.
+    """
+    family, fc_config = _get_font_info(font_path)
+    markup = f'<span font="{family}" size="{size}">{emoji}</span>'
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmpname = tmp.name
     try:
         subprocess.run(
             ["magick", "-background", "none", f"pango:{markup}", tmpname],
             check=True, capture_output=True,
+            env={**os.environ, "FONTCONFIG_FILE": fc_config},
         )
         return Image.open(tmpname).convert("RGBA")
     finally:
@@ -52,15 +103,15 @@ def trim_resize(img: Image.Image, max_size: int) -> Image.Image:
     return img
 
 
-def render_face(emoji: str) -> Image.Image:
+def render_face(emoji: str, font_path: str) -> Image.Image:
     """Render face emoji, trim, and resize."""
-    raw = render_pango(emoji, FACE_PANGO)
+    raw = render_pango(emoji, FACE_PANGO, font_path)
     return trim_resize(raw, FACE_SIZE)
 
 
-def render_aux(emoji: str) -> Image.Image:
+def render_aux(emoji: str, font_path: str) -> Image.Image:
     """Render auxiliary emoji, trim, and resize."""
-    raw = render_pango(emoji, AUX_PANGO)
+    raw = render_pango(emoji, AUX_PANGO, font_path)
     return trim_resize(raw, AUX_SIZE)
 
 
@@ -119,7 +170,13 @@ def main():
         help="Output directory")
     parser.add_argument("--quality", type=int, default=None,
         help="Override JPEG quality from states.json")
+    parser.add_argument("--font", default=DEFAULT_FONT,
+        help=f"Path to Noto COLRv1 .ttf font (default: {DEFAULT_FONT})")
     args = parser.parse_args()
+
+    if not os.path.exists(args.font):
+        print(f"Font not found: {args.font}", file=sys.stderr)
+        sys.exit(1)
 
     states, render, _debounce, jpeg_quality = load_states(args.states_json)
     quality = args.quality if args.quality is not None else jpeg_quality
@@ -140,8 +197,8 @@ def main():
         outpath = os.path.join(args.out_dir, fname)
         print(f"  {fname:24s}  face={face}  aux={aux or '-':4s}", end="")
 
-        face_img = render_face(face)
-        aux_img = render_aux(aux) if aux else None
+        face_img = render_face(face, args.font)
+        aux_img = render_aux(aux, args.font) if aux else None
         result = composite(face_img, aux_img, aux_pos,
                            face_scale=face_scale,
                            face_offset_x=face_offset_x)

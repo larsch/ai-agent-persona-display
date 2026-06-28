@@ -24,7 +24,7 @@ import serial
 from states_model import load_states, State
 
 FIFO_PATH = "/tmp/xi_display_fifo"
-STATES_DIR = os.path.expanduser("~/prj/emoji/states")
+STATES_DIR = os.path.join(os.path.dirname(__file__), "states")
 
 # ── Global constants (not derived from model) ────────────────────────────
 
