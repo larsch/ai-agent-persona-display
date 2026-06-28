@@ -130,7 +130,7 @@ def ensure_fifo():
         os.mkfifo(FIFO_PATH)
 
 
-def run(port, baud, dry_run, states_json):
+def run(port, baud, dry_run, states_json, initial_brightness=None):
     # ── Load model ───────────────────────────────────────────────────────
     states, _render, global_debounce_ms, _jpeg_quality = load_states(states_json)
     states_by_name: dict[str, State] = {s.name: s for s in states}
@@ -151,6 +151,13 @@ def run(port, baud, dry_run, states_json):
     ser = None if dry_run else open_serial(port, baud)
     if ser is not None:
         time.sleep(2.5)  # let ESP32 boot after DTR reset
+        if initial_brightness is not None:
+            try:
+                send_brightness(ser, initial_brightness)
+                print(f"  initial brightness set to {initial_brightness}/255",
+                      file=sys.stderr)
+            except serial.SerialException:
+                pass
 
     # ── Runtime state ────────────────────────────────────────────────────
     last_upload = 0.0
@@ -321,8 +328,11 @@ if __name__ == "__main__":
     p.add_argument("--port", default="/dev/ttyUSB0")
     p.add_argument("--baud", type=int, default=3000000)
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--brightness", type=int, metavar="0-255",
+                   help="Initial backlight brightness (0=off, 255=full)")
     p.add_argument("--states-json",
                    default=os.path.join(os.path.dirname(__file__), "states.json"),
                    help="Path to states.json")
     args = p.parse_args()
-    run(args.port, args.baud, args.dry_run, args.states_json)
+    run(args.port, args.baud, args.dry_run, args.states_json,
+        args.brightness)
