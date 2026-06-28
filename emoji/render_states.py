@@ -150,6 +150,9 @@ def composite(face: Image.Image, aux: Image.Image | None,
         elif aux_pos == "bottom-left":
             ax = 20
             ay = CANVAS_SIZE - aux.height - 20
+        elif aux_pos == "bottom-right":
+            ax = CANVAS_SIZE - aux.width - 20
+            ay = CANVAS_SIZE - aux.height - 20
         else:
             ax = 20
             ay = CANVAS_SIZE - aux.height - 20
