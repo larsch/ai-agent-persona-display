@@ -4,6 +4,8 @@ Physical emoji display for an AI agent — a tiny screen that shows what the
 agent is doing through expressive emoji faces.  Runs on an ESP32-S3 with a
 480×480 LCD.
 
+![Demo cycle](emoji/demo.gif)
+
 ## How it works
 
 ```
