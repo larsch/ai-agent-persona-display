@@ -16,7 +16,7 @@
     },
     {
       "name": "waiting",
-      "images": ["waiting_0.jpg","waiting_1.jpg","waiting_2.jpg","waiting_3.jpg","waiting_4.jpg"]
+      "images": ["waiting_0.jpg","waiting_1.jpg","waiting_2.jpg","waiting_3.jpg","waiting_4.jpg","waiting_5.jpg"]
     },
     {
       "name": "thinking",
@@ -162,6 +162,7 @@
     "waiting_2.jpg":            {"face": "😑"},
     "waiting_3.jpg":            {"face": "😮‍💨"},
     "waiting_4.jpg":            {"face": "😵‍💫"},
+    "waiting_5.jpg":            {"face": "🫡"},
     "thinking.jpg":             {"face": "🤔", "aux": "💭", "aux_pos": "top-right"},
     "thinking_0.jpg":           {"face": "🤔"},
     "thinking_1.jpg":           {"face": "🤔", "aux": "💭", "aux_pos": "top-right"},
