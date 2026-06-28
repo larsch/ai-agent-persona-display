@@ -4,6 +4,7 @@
 # Each hook writes a JSON event line to the display daemon's FIFO.
 #
 # Hook point → display state mapping:
+#   pre_turn                 → waiting
 #   on_first_thinking_token → thinking
 #   on_first_text_token      → responding
 #   pre_tool                 → tool_<name>  (one entry per tool below)
@@ -16,6 +17,9 @@
 #
 # Keep in sync with states.json — if you add/rename a tool there, add a
 # matching [[hooks.pre_tool]] entry here.
+
+[[hooks.pre_turn]]
+bash = "echo '{\"event\":\"waiting\"}' >> /tmp/xi_display_fifo"
 
 [[hooks.on_first_thinking_token]]
 bash = "echo '{\"event\":\"thinking\"}' >> /tmp/xi_display_fifo"

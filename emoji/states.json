@@ -30,9 +30,9 @@
     },
     {
       "name": "done",
-      "images": ["done_0.jpg","done_1.jpg","done_2.jpg"],
+      "images": ["done_0.jpg","done_1.jpg","done_2.jpg","done_3.jpg","done_4.jpg","done_5.jpg"],
       "min_display_ms": 2000,
-      "timeout_ms": 5000,
+      "timeout_ms": 10000,
       "timeout_state": "idle"
     },
     {
@@ -185,6 +185,9 @@
     "done_0.jpg":               {"face": "🥳", "face_scale": 1.2, "face_offset_x": 16},
     "done_1.jpg":               {"face": "🤩"},
     "done_2.jpg":               {"face": "😎"},
+    "done_3.jpg":               {"face": "🥳", "face_scale": 1.2, "face_offset_x": 16, "aux": "👍", "aux_pos": "bottom-left"},
+    "done_4.jpg":               {"face": "🤩", "aux": "👍", "aux_pos": "bottom-left"},
+    "done_5.jpg":               {"face": "😎", "aux": "👍", "aux_pos": "bottom-left"},
     "error.jpg":                {"face": "😱", "aux": "❌", "aux_pos": "bottom-left"},
     "tool_running.jpg":         {"face": "😖", "aux": "⚙️", "aux_pos": "bottom-left"},
     "tool_running_0.jpg":       {"face": "😖", "aux": "⚙️", "aux_pos": "bottom-left"},

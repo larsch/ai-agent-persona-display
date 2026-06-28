@@ -17,7 +17,7 @@ bottom-left (264×264). The speech bubble (responding) is top-right.
 | 2 | **sleep** | (30s after idle) | 🥱😮‍💨😑😌😪😴 | — | Cycles randomly every 10s (never repeats consecutively). |
 
 No hook for sleep — daemon auto-transitions 30s after idle.
-No hook for done→idle — daemon auto-transitions 5s after done.
+No hook for done→idle — daemon auto-transitions 10s after done.
 
 Sleep displays a randomly-selected face from the pool (🥱 😮‍💨 😑 😌 😪 😴 😌),
 changing to a different image every 10 seconds.
@@ -103,7 +103,7 @@ Any state change (FIFO event) resets the timer.
   │                                          │
   │                                    on_done ▼
   │                                        DONE
-  │                                         │ (5s timeout)
+  │                                         │ (10s timeout)
   │                                   on_idle ▼
   └───────────────────────────────────── IDLE
                                            │ (30s no events)
@@ -122,7 +122,7 @@ Either resets on any FIFO event.
 - Events debounced by event type: same event type cannot show twice consecutively.
 - 400ms global debounce between any two uploads.
 - Sleep auto-triggers 30s after `idle` event if no other events arrive.
-- Done auto-transitions to idle 5s after the `done` event if no other events arrive.
+- Done auto-transitions to idle 10s after the `done` event if no other events arrive.
 - Any active state (not done, idle, sleep, suspicious, worried, disappointed) for 15s → suspicious (🤨).
 - Suspicious for 15s → worried (😟), 15s more → disappointed (😞), 15s more → sleep (😴).
   Any FIFO event during the chain resets the timer.
