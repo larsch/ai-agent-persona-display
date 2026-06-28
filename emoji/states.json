@@ -20,7 +20,7 @@
     },
     {
       "name": "thinking",
-      "images": ["thinking_0.jpg","thinking_1.jpg","thinking_2.jpg","thinking_3.jpg","thinking_4.jpg"],
+      "images": ["thinking_0.jpg","thinking_1.jpg","thinking_2.jpg","thinking_3.jpg","thinking_4.jpg","thinking_5.jpg","thinking_6.jpg","thinking_7.jpg","thinking_8.jpg","thinking_9.jpg","thinking_10.jpg","thinking_11.jpg"],
       "cycle_interval_ms": 5000
     },
     {
@@ -79,15 +79,15 @@
     },
     {
       "name": "tool_bash",
-      "images": ["bash.jpg"]
+      "images": ["bash_0.jpg","bash_1.jpg","bash_2.jpg"]
     },
     {
       "name": "tool_python",
-      "images": ["python.jpg"]
+      "images": ["python_0.jpg","python_1.jpg","python_2.jpg"]
     },
     {
       "name": "tool_exec",
-      "images": ["exec.jpg"]
+      "images": ["exec_0.jpg","exec_1.jpg","exec_2.jpg"]
     },
     {
       "name": "tool_read_file",
@@ -112,7 +112,7 @@
     },
     {
       "name": "tool_running",
-      "images": ["tool_running.jpg"]
+      "images": ["tool_running_0.jpg","tool_running_1.jpg","tool_running_2.jpg"]
     },
     {
       "name": "step_back",
@@ -163,11 +163,18 @@
     "waiting_3.jpg":            {"face": "😮‍💨"},
     "waiting_4.jpg":            {"face": "😵‍💫"},
     "thinking.jpg":             {"face": "🤔", "aux": "💭", "aux_pos": "top-right"},
-    "thinking_0.jpg":           {"face": "🤔", "aux": "💭", "aux_pos": "top-right"},
-    "thinking_1.jpg":           {"face": "🤔", "aux": "🧠", "aux_pos": "top-right"},
-    "thinking_2.jpg":           {"face": "🤔", "aux": "💡", "aux_pos": "top-right"},
-    "thinking_3.jpg":           {"face": "😕", "aux": "💭", "aux_pos": "top-right"},
-    "thinking_4.jpg":           {"face": "🤯"},
+    "thinking_0.jpg":           {"face": "🤔"},
+    "thinking_1.jpg":           {"face": "🤔", "aux": "💭", "aux_pos": "top-right"},
+    "thinking_2.jpg":           {"face": "🤔", "aux": "🧠", "aux_pos": "top-right"},
+    "thinking_3.jpg":           {"face": "🤔", "aux": "💡", "aux_pos": "top-right"},
+    "thinking_4.jpg":           {"face": "😖"},
+    "thinking_5.jpg":           {"face": "😖", "aux": "💭", "aux_pos": "top-right"},
+    "thinking_6.jpg":           {"face": "😖", "aux": "🧠", "aux_pos": "top-right"},
+    "thinking_7.jpg":           {"face": "😖", "aux": "💡", "aux_pos": "top-right"},
+    "thinking_8.jpg":           {"face": "🤫"},
+    "thinking_9.jpg":           {"face": "🤫", "aux": "💭", "aux_pos": "top-right"},
+    "thinking_10.jpg":          {"face": "🤫", "aux": "🧠", "aux_pos": "top-right"},
+    "thinking_11.jpg":          {"face": "🤫", "aux": "💡", "aux_pos": "top-right"},
     "responding.jpg":           {"face": "😊", "aux": "💬", "aux_pos": "top-right"},
     "responding_0.jpg":         {"face": "😮", "aux": "💬", "aux_pos": "top-right"},
     "responding_1.jpg":         {"face": "😯", "aux": "💬", "aux_pos": "top-right"},
@@ -180,9 +187,21 @@
     "done_2.jpg":               {"face": "😎"},
     "error.jpg":                {"face": "😱", "aux": "❌", "aux_pos": "bottom-left"},
     "tool_running.jpg":         {"face": "😖", "aux": "⚙️", "aux_pos": "bottom-left"},
+    "tool_running_0.jpg":       {"face": "😖", "aux": "⚙️", "aux_pos": "bottom-left"},
+    "tool_running_1.jpg":       {"face": "😬", "aux": "⚙️", "aux_pos": "bottom-left"},
+    "tool_running_2.jpg":       {"face": "🫠", "aux": "⚙️", "aux_pos": "bottom-left"},
     "bash.jpg":                 {"face": "😖", "aux": "💻", "aux_pos": "bottom-left"},
+    "bash_0.jpg":               {"face": "😖", "aux": "💻", "aux_pos": "bottom-left"},
+    "bash_1.jpg":               {"face": "😬", "aux": "💻", "aux_pos": "bottom-left"},
+    "bash_2.jpg":               {"face": "🫠", "aux": "💻", "aux_pos": "bottom-left"},
     "python.jpg":               {"face": "😖", "aux": "🐍", "aux_pos": "bottom-left"},
+    "python_0.jpg":             {"face": "😖", "aux": "🐍", "aux_pos": "bottom-left"},
+    "python_1.jpg":             {"face": "😬", "aux": "🐍", "aux_pos": "bottom-left"},
+    "python_2.jpg":             {"face": "🫠", "aux": "🐍", "aux_pos": "bottom-left"},
     "exec.jpg":                 {"face": "😖", "aux": "▶️", "aux_pos": "bottom-left"},
+    "exec_0.jpg":               {"face": "😖", "aux": "▶️", "aux_pos": "bottom-left"},
+    "exec_1.jpg":               {"face": "😬", "aux": "▶️", "aux_pos": "bottom-left"},
+    "exec_2.jpg":               {"face": "🫠", "aux": "▶️", "aux_pos": "bottom-left"},
     "read_file.jpg":            {"face": "🧐", "aux": "📖", "aux_pos": "bottom-left"},
     "read_file_0.jpg":          {"face": "🧐", "aux": "📖", "aux_pos": "bottom-left"},
     "read_file_1.jpg":          {"face": "🤓", "aux": "📖", "aux_pos": "bottom-left"},

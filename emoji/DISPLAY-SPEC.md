@@ -39,7 +39,7 @@ Any state change (FIFO event) resets the timer.
 | # | State | Hook | Face | Aux | Meaning |
 |---|-------|------|------|-----|---------|
 | 3 | **waiting** | `pre_turn` | 😒🙄😑😮‍💨😵‍💫 | — | Request sent, awaiting first token. Face chosen randomly each turn. |
-| 4 | **thinking** | `on_first_thinking_token` | 🤔 | — | Model is producing chain-of-thought / reasoning. |
+| 4 | **thinking** | `on_first_thinking_token` | 🤔😖🤫 | — | Model is producing chain-of-thought / reasoning. Face and aux cycle randomly (cross-product of 3 faces × 4 aux). |
 | 5 | **responding** | `on_first_text_token` | 😮😯😲😦😧 | 💬 | Model is streaming visible output. Face cycles randomly every 1s (never repeats consecutively). |
 
 ### Tool execution

@@ -28,8 +28,6 @@ STATES_DIR = os.path.join(os.path.dirname(__file__), "states")
 
 # ── Global constants (not derived from model) ────────────────────────────
 
-THINKING_MIND_BLOWN_S = 15.0   # 🤯 gate: thinking_4.jpg only after 15s
-
 
 def preencode(images: set[str]) -> dict[str, bytes]:
     """Load JPEG images from disk into memory. Skips missing files."""
@@ -160,7 +158,6 @@ def run(port, baud, dry_run, states_json):
     current_image: str | None = None       # specific image filename showing
     state_entry_time = 0.0                 # when current_label was entered
     last_cycle_time = 0.0                  # last image cycle change
-    thinking_started = 0.0                 # monotonic time thinking entered
     pending_event: dict | None = None      # event awaiting debounce flush
     pending_deadline = 0.0
 
@@ -172,7 +169,7 @@ def run(port, baud, dry_run, states_json):
 
     def do_upload(fname, label, reason="event"):
         nonlocal last_upload, current_label, current_image
-        nonlocal state_entry_time, last_cycle_time, thinking_started
+        nonlocal state_entry_time, last_cycle_time
 
         if fname not in cache:
             return
@@ -191,8 +188,6 @@ def run(port, baud, dry_run, states_json):
             current_label = label
             state_entry_time = now
             last_cycle_time = now
-            if label == "thinking":
-                thinking_started = now
 
         current_image = fname
         last_upload = now
@@ -210,14 +205,6 @@ def run(port, baud, dry_run, states_json):
             return
 
         evtype = event.get("event", "")
-
-        # 🤯 gate: thinking_4.jpg only after THINKING_MIND_BLOWN_S
-        if state_name == "thinking" and fname == "thinking_4.jpg":
-            if time.monotonic() - thinking_started < THINKING_MIND_BLOWN_S:
-                pool = [img for img in states_by_name["thinking"].images
-                        if img != "thinking_4.jpg"]
-                if pool:
-                    fname = random.choice(pool)
 
         # Dedup: already showing this exact state
         if state_name == current_label:
