@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Render emoji state images using ImageMagick pango + Noto Color Emoji COLRv1.
 
+Reads states.json for the list of images to render, plus JPEG quality.
+Images without a "render" entry are skipped (sourced externally).
+
 Requires: ImageMagick, Pillow, Noto-COLRv1.ttf installed to ~/.local/share/fonts/
 """
 
-import subprocess
-import tempfile
+import argparse
 import os
+import subprocess
+import sys
+import tempfile
 from PIL import Image
+
+from states_model import load_states
 
 STATES_DIR = os.path.expanduser("~/prj/emoji/states")
 CANVAS_SIZE = 480
@@ -37,12 +44,10 @@ def render_pango(emoji: str, size: int) -> Image.Image:
 
 def trim_resize(img: Image.Image, max_size: int) -> Image.Image:
     """Trim transparent borders, then fit into max_size×max_size preserving aspect ratio."""
-    # Crop to bounding box of non-transparent pixels
     bbox = img.getbbox()
     if bbox is None:
         return img
     img = img.crop(bbox)
-    # Resize to fit max_size, maintaining aspect ratio
     img.thumbnail((max_size, max_size), Image.LANCZOS)
     return img
 
@@ -105,90 +110,45 @@ def composite(face: Image.Image, aux: Image.Image | None,
     return rgb
 
 
-# ── State definitions ────────────────────────────────────────────────────
-
-STATES = [
-    # (filename, face_emoji, aux_emoji, aux_position)
-    ("idle.png",           "🙂",   None,    None),
-    ("sleep.png",          "😴",   None,    None),  # legacy, kept for compat
-    # Sleep cycle pool (cycled randomly every 10s while sleeping)
-    ("sleep_0.png",        "🥱",   None,    None),  # yawning face
-    ("sleep_1.png",        "😮‍💨", None,    None),  # face exhaling
-    ("sleep_2.png",        "😑",   None,    None),  # expressionless
-    ("sleep_3.png",        "😌",   None,    None),  # relieved
-    ("sleep_4.png",        "😪",   None,    None),  # sleepy face
-    ("sleep_5.png",        "😴",   None,    None),  # sleeping face
-    ("sleep_6.png",        "😌",   None,    None),  # relieved (duplicate)
-    ("waiting_0.png",      "😒",   None,    None),
-    ("waiting_1.png",      "🙄",   None,    None),
-    ("waiting_2.png",      "😑",   None,    None),
-    ("waiting_3.png",      "😮‍💨", None,    None),
-    ("waiting_4.png",      "😵‍💫", None,    None),
-    ("thinking.png",       "🤔",   "💭",    "top-right"),  # legacy
-    # Thinking cycle pool (cycled every 5s while reasoning)
-    ("thinking_0.png",     "🤔",   "💭",    "top-right"),
-    ("thinking_1.png",     "🤔",   "🧠",    "top-right"),
-    ("thinking_2.png",     "🤔",   "💡",    "top-right"),
-    ("thinking_3.png",     "😕",   "💭",    "top-right"),
-    ("thinking_4.png",     "🤯",   None,    None),
-    ("responding.png",     "😊",   "💬",    "top-right"),  # legacy, kept for compat
-    # Responding cycle pool (cycled every 1s while speaking)
-    ("responding_0.png",   "😮",   "💬",    "top-right"),
-    ("responding_1.png",   "😯",   "💬",    "top-right"),
-    ("responding_2.png",   "😲",   "💬",    "top-right"),
-    ("responding_3.png",   "😦",   "💬",    "top-right"),
-    ("responding_4.png",   "😧",   "💬",    "top-right"),
-    ("done.png",           "🥳",   None,    None,     {"face_scale": 1.2, "face_offset_x": 16}),  # legacy
-    # Done celebration pool (cycled every 1s while celebrating)
-    ("done_0.png",         "🥳",   None,    None,     {"face_scale": 1.2, "face_offset_x": 16}),
-    ("done_1.png",         "🤩",   None,    None),
-    ("done_2.png",         "😎",   None,    None),
-    ("error.png",          "😱",   "❌",    "bottom-left"),
-    ("tool_running.png",   "😖",   "⚙️",    "bottom-left"),
-    ("bash.png",           "😖",   "💻",    "bottom-left"),
-    ("python.png",         "😖",   "🐍",    "bottom-left"),
-    ("exec.png",           "😖",   "▶️",    "bottom-left"),
-    ("read_file.png",      "🧐",   "📖",    "bottom-left"),
-    ("write_file.png",     "🧐",   "✍️",    "bottom-left"),
-    ("edit_file.png",      "🧐",   "✂️",    "bottom-left"),
-    ("find_files.png",     "🧐",   "🔍",    "bottom-left"),
-    ("ask_user.png",       "🤷",   "❓",    "bottom-left"),  # legacy
-    # Ask-user pool (cycled every 5s while waiting for user input)
-    ("ask_user_0.png",     "🫣",   "❓",    "top-right"),
-    ("ask_user_1.png",     "😕",   "❓",    "top-right"),
-    ("ask_user_2.png",     "🥺",   "❓",    "top-right"),
-    ("ask_user_3.png",     "😐",   "❓",    "top-right"),
-    ("compacting.png",     "😫",   "🗜️",    "bottom-left"),
-    ("external_change.png","😲",   "👀",    "bottom-left"),
-    ("status_update.png",  "😫",   "🚦",    "bottom-left"),
-    ("suspicious.png",     "🤨",   None,    None),
-    ("worried.png",        "😟",   None,    None),
-    ("disappointed.png",   "😞",   None,    None),
-    # Legacy / extra states with no hook yet (kept for compatibility)
-    ("step_back.png",      "🧐",   "⏪",    "bottom-left"),
-    ("shell_mode.png",     "😎",   "🐚",    "bottom-left"),
-    ("login.png",          "😐",   "🔑",    "bottom-left"),
-    ("rate_limited.png",   "😫",   "🚦",    "bottom-left"),
-    ("turn_end.png",       "😊",   None,    None),
-    ("waiting.png",        "😒",   None,    None),  # generic waiting
-]
-
-
 def main():
-    os.makedirs(STATES_DIR, exist_ok=True)
-    for entry in STATES:
-        fname, face, aux = entry[0], entry[1], entry[2]
-        aux_pos = entry[3] if len(entry) > 3 else None
-        overrides = entry[4] if len(entry) > 4 else {}
-        outpath = os.path.join(STATES_DIR, fname)
+    parser = argparse.ArgumentParser(description="Render emoji state images")
+    parser.add_argument("--states-json", default=os.path.join(
+        os.path.dirname(__file__), "states.json"),
+        help="Path to states.json")
+    parser.add_argument("--out-dir", default=STATES_DIR,
+        help="Output directory")
+    parser.add_argument("--quality", type=int, default=None,
+        help="Override JPEG quality from states.json")
+    args = parser.parse_args()
+
+    states, render, _debounce, jpeg_quality = load_states(args.states_json)
+    quality = args.quality if args.quality is not None else jpeg_quality
+
+    if not render:
+        print("No 'render' section in states.json — nothing to render.")
+        sys.exit(0)
+
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    for fname, params in render.items():
+        face = params["face"]
+        aux = params.get("aux")
+        aux_pos = params.get("aux_pos", "bottom-left")
+        face_scale = params.get("face_scale", 1.0)
+        face_offset_x = params.get("face_offset_x", 0)
+
+        outpath = os.path.join(args.out_dir, fname)
         print(f"  {fname:24s}  face={face}  aux={aux or '-':4s}", end="")
+
         face_img = render_face(face)
         aux_img = render_aux(aux) if aux else None
-        result = composite(face_img, aux_img, aux_pos or "bottom-left",
-                           face_scale=overrides.get("face_scale", 1.0),
-                           face_offset_x=overrides.get("face_offset_x", 0))
-        result.save(outpath, "PNG")
-        print(f"  → {result.size} ✓")
+        result = composite(face_img, aux_img, aux_pos,
+                           face_scale=face_scale,
+                           face_offset_x=face_offset_x)
+
+        # Save as JPEG
+        result.save(outpath, "JPEG", quality=quality)
+        print(f"  → {result.size} q={quality} ✓")
 
 
 if __name__ == "__main__":

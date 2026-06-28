@@ -1,0 +1,76 @@
+# Xi-agent hook template for the emoji display daemon.
+#
+# Append this to ~/.config/xi/config.toml (or merge with your existing hooks).
+# Each hook writes a JSON event line to the display daemon's FIFO.
+#
+# Hook point → display state mapping:
+#   on_first_thinking_token → thinking
+#   on_first_text_token      → responding
+#   pre_tool                 → tool_<name>  (one entry per tool below)
+#   on_done                  → done
+#   on_idle                  → idle
+#   on_error                 → error
+#   on_compacting            → compacting
+#   on_external_change       → external_change
+#   on_status_update         → status_update
+#
+# Keep in sync with states.json — if you add/rename a tool there, add a
+# matching [[hooks.pre_tool]] entry here.
+
+[[hooks.on_first_thinking_token]]
+bash = "echo '{\"event\":\"thinking\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.on_first_text_token]]
+bash = "echo '{\"event\":\"responding\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.on_done]]
+bash = "echo '{\"event\":\"done\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.on_idle]]
+bash = "echo '{\"event\":\"idle\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.on_error]]
+bash = "echo '{\"event\":\"error\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.on_compacting]]
+bash = "echo '{\"event\":\"compacting\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.on_external_change]]
+bash = "echo '{\"event\":\"external_change\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.on_status_update]]
+bash = "echo '{\"event\":\"status_update\"}' >> /tmp/xi_display_fifo"
+
+# ── Tool hooks (one per tool; pre_tool fires when the agent starts executing) ──
+
+[[hooks.pre_tool]]
+include_tools = ["bash"]
+bash = "echo '{\"event\":\"tool\",\"tool\":\"bash\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.pre_tool]]
+include_tools = ["exec"]
+bash = "echo '{\"event\":\"tool\",\"tool\":\"exec\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.pre_tool]]
+include_tools = ["python"]
+bash = "echo '{\"event\":\"tool\",\"tool\":\"python\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.pre_tool]]
+include_tools = ["read_file"]
+bash = "echo '{\"event\":\"tool\",\"tool\":\"read_file\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.pre_tool]]
+include_tools = ["write_file"]
+bash = "echo '{\"event\":\"tool\",\"tool\":\"write_file\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.pre_tool]]
+include_tools = ["edit_file"]
+bash = "echo '{\"event\":\"tool\",\"tool\":\"edit_file\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.pre_tool]]
+include_tools = ["find_files"]
+bash = "echo '{\"event\":\"tool\",\"tool\":\"find_files\"}' >> /tmp/xi_display_fifo"
+
+[[hooks.pre_tool]]
+include_tools = ["ask_user"]
+bash = "echo '{\"event\":\"tool\",\"tool\":\"ask_user\"}' >> /tmp/xi_display_fifo"

@@ -1,0 +1,207 @@
+{
+  "debounce_ms": 400,
+  "jpeg_quality": 50,
+
+  "states": [
+    {
+      "name": "idle",
+      "images": ["idle.jpg"],
+      "timeout_ms": 30000,
+      "timeout_state": "sleep"
+    },
+    {
+      "name": "sleep",
+      "images": ["sleep_0.jpg","sleep_1.jpg","sleep_2.jpg","sleep_3.jpg","sleep_4.jpg","sleep_5.jpg","sleep_6.jpg"],
+      "cycle_interval_ms": 10000
+    },
+    {
+      "name": "waiting",
+      "images": ["waiting_0.jpg","waiting_1.jpg","waiting_2.jpg","waiting_3.jpg","waiting_4.jpg"]
+    },
+    {
+      "name": "thinking",
+      "images": ["thinking_0.jpg","thinking_1.jpg","thinking_2.jpg","thinking_3.jpg","thinking_4.jpg"],
+      "cycle_interval_ms": 5000
+    },
+    {
+      "name": "responding",
+      "images": ["responding_0.jpg","responding_1.jpg","responding_2.jpg","responding_3.jpg","responding_4.jpg"],
+      "cycle_interval_ms": 1000
+    },
+    {
+      "name": "done",
+      "images": ["done_0.jpg","done_1.jpg","done_2.jpg"],
+      "min_display_ms": 2000,
+      "timeout_ms": 5000,
+      "timeout_state": "idle"
+    },
+    {
+      "name": "suspicious",
+      "images": ["suspicious.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "worried"
+    },
+    {
+      "name": "worried",
+      "images": ["worried.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "disappointed"
+    },
+    {
+      "name": "disappointed",
+      "images": ["disappointed.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "sleep"
+    },
+    {
+      "name": "error",
+      "images": ["error.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    },
+    {
+      "name": "compacting",
+      "images": ["compacting.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    },
+    {
+      "name": "external_change",
+      "images": ["external_change.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    },
+    {
+      "name": "status_update",
+      "images": ["status_update.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    },
+    {
+      "name": "tool_bash",
+      "images": ["bash.jpg"]
+    },
+    {
+      "name": "tool_python",
+      "images": ["python.jpg"]
+    },
+    {
+      "name": "tool_exec",
+      "images": ["exec.jpg"]
+    },
+    {
+      "name": "tool_read_file",
+      "images": ["read_file.jpg"]
+    },
+    {
+      "name": "tool_write_file",
+      "images": ["write_file.jpg"]
+    },
+    {
+      "name": "tool_edit_file",
+      "images": ["edit_file.jpg"]
+    },
+    {
+      "name": "tool_find_files",
+      "images": ["find_files.jpg"]
+    },
+    {
+      "name": "tool_ask_user",
+      "images": ["ask_user_0.jpg","ask_user_1.jpg","ask_user_2.jpg","ask_user_3.jpg"],
+      "cycle_interval_ms": 5000
+    },
+    {
+      "name": "tool_running",
+      "images": ["tool_running.jpg"]
+    },
+    {
+      "name": "step_back",
+      "images": ["step_back.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    },
+    {
+      "name": "shell_mode",
+      "images": ["shell_mode.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    },
+    {
+      "name": "login",
+      "images": ["login.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    },
+    {
+      "name": "rate_limited",
+      "images": ["rate_limited.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    },
+    {
+      "name": "turn_end",
+      "images": ["turn_end.jpg"],
+      "timeout_ms": 15000,
+      "timeout_state": "suspicious"
+    }
+  ],
+
+  "render": {
+    "idle.jpg":                 {"face": "🙂"},
+    "sleep.jpg":                {"face": "😴"},
+    "sleep_0.jpg":              {"face": "🥱"},
+    "sleep_1.jpg":              {"face": "😮‍💨"},
+    "sleep_2.jpg":              {"face": "😑"},
+    "sleep_3.jpg":              {"face": "😌"},
+    "sleep_4.jpg":              {"face": "😪"},
+    "sleep_5.jpg":              {"face": "😴"},
+    "sleep_6.jpg":              {"face": "😌"},
+    "waiting.jpg":              {"face": "😒"},
+    "waiting_0.jpg":            {"face": "😒"},
+    "waiting_1.jpg":            {"face": "🙄"},
+    "waiting_2.jpg":            {"face": "😑"},
+    "waiting_3.jpg":            {"face": "😮‍💨"},
+    "waiting_4.jpg":            {"face": "😵‍💫"},
+    "thinking.jpg":             {"face": "🤔", "aux": "💭", "aux_pos": "top-right"},
+    "thinking_0.jpg":           {"face": "🤔", "aux": "💭", "aux_pos": "top-right"},
+    "thinking_1.jpg":           {"face": "🤔", "aux": "🧠", "aux_pos": "top-right"},
+    "thinking_2.jpg":           {"face": "🤔", "aux": "💡", "aux_pos": "top-right"},
+    "thinking_3.jpg":           {"face": "😕", "aux": "💭", "aux_pos": "top-right"},
+    "thinking_4.jpg":           {"face": "🤯"},
+    "responding.jpg":           {"face": "😊", "aux": "💬", "aux_pos": "top-right"},
+    "responding_0.jpg":         {"face": "😮", "aux": "💬", "aux_pos": "top-right"},
+    "responding_1.jpg":         {"face": "😯", "aux": "💬", "aux_pos": "top-right"},
+    "responding_2.jpg":         {"face": "😲", "aux": "💬", "aux_pos": "top-right"},
+    "responding_3.jpg":         {"face": "😦", "aux": "💬", "aux_pos": "top-right"},
+    "responding_4.jpg":         {"face": "😧", "aux": "💬", "aux_pos": "top-right"},
+    "done.jpg":                 {"face": "🥳", "face_scale": 1.2, "face_offset_x": 16},
+    "done_0.jpg":               {"face": "🥳", "face_scale": 1.2, "face_offset_x": 16},
+    "done_1.jpg":               {"face": "🤩"},
+    "done_2.jpg":               {"face": "😎"},
+    "error.jpg":                {"face": "😱", "aux": "❌", "aux_pos": "bottom-left"},
+    "tool_running.jpg":         {"face": "😖", "aux": "⚙️", "aux_pos": "bottom-left"},
+    "bash.jpg":                 {"face": "😖", "aux": "💻", "aux_pos": "bottom-left"},
+    "python.jpg":               {"face": "😖", "aux": "🐍", "aux_pos": "bottom-left"},
+    "exec.jpg":                 {"face": "😖", "aux": "▶️", "aux_pos": "bottom-left"},
+    "read_file.jpg":            {"face": "🧐", "aux": "📖", "aux_pos": "bottom-left"},
+    "write_file.jpg":           {"face": "🧐", "aux": "✍️", "aux_pos": "bottom-left"},
+    "edit_file.jpg":            {"face": "🧐", "aux": "✂️", "aux_pos": "bottom-left"},
+    "find_files.jpg":           {"face": "🧐", "aux": "🔍", "aux_pos": "bottom-left"},
+    "ask_user.jpg":             {"face": "🤷", "aux": "❓", "aux_pos": "bottom-left"},
+    "ask_user_0.jpg":           {"face": "🫣", "aux": "❓", "aux_pos": "top-right"},
+    "ask_user_1.jpg":           {"face": "😕", "aux": "❓", "aux_pos": "top-right"},
+    "ask_user_2.jpg":           {"face": "🥺", "aux": "❓", "aux_pos": "top-right"},
+    "ask_user_3.jpg":           {"face": "😐", "aux": "❓", "aux_pos": "top-right"},
+    "compacting.jpg":           {"face": "😫", "aux": "🗜️", "aux_pos": "bottom-left"},
+    "external_change.jpg":      {"face": "😲", "aux": "👀", "aux_pos": "bottom-left"},
+    "status_update.jpg":        {"face": "😫", "aux": "🚦", "aux_pos": "bottom-left"},
+    "suspicious.jpg":           {"face": "🤨"},
+    "worried.jpg":              {"face": "😟"},
+    "disappointed.jpg":         {"face": "😞"},
+    "step_back.jpg":            {"face": "🧐", "aux": "⏪", "aux_pos": "bottom-left"},
+    "shell_mode.jpg":           {"face": "😎", "aux": "🐚", "aux_pos": "bottom-left"},
+    "login.jpg":                {"face": "😐", "aux": "🔑", "aux_pos": "bottom-left"},
+    "rate_limited.jpg":         {"face": "😫", "aux": "🚦", "aux_pos": "bottom-left"},
+    "turn_end.jpg":             {"face": "😊"}
+  }
+}
