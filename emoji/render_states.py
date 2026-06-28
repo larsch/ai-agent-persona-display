@@ -12,7 +12,7 @@ from PIL import Image
 STATES_DIR = os.path.expanduser("~/prj/emoji/states")
 CANVAS_SIZE = 480
 FACE_SIZE = 320   # max dimension after trim+resize
-AUX_SIZE = 264    # max dimension after trim+resize
+AUX_SIZE = 150    # max dimension after trim+resize
 BLACK = (0, 0, 0, 255)
 
 # Face emoji pango size (points * PANGO_SCALE / 1024)
@@ -60,13 +60,31 @@ def render_aux(emoji: str) -> Image.Image:
 
 
 def composite(face: Image.Image, aux: Image.Image | None,
-              aux_pos: str = "bottom-left") -> Image.Image:
-    """Composite face (centered) and optional aux onto 480×480 black canvas."""
+              aux_pos: str = "bottom-left",
+              face_scale: float = 1.0, face_offset_x: int = 0) -> Image.Image:
+    """Composite face (centered) and optional aux onto 480×480 black canvas.
+
+    face_scale: optional multiplier for face size (e.g. 1.2 = 20% bigger).
+    face_offset_x: optional horizontal pixel shift (positive = right).
+    """
     canvas = Image.new("RGBA", (CANVAS_SIZE, CANVAS_SIZE), BLACK)
 
-    # Center the face
-    fx = (CANVAS_SIZE - face.width) // 2
-    fy = (CANVAS_SIZE - face.height) // 2
+    # Remember original height for bottom-anchored scaling
+    orig_h = face.height
+
+    # Apply scale to face if needed
+    if face_scale != 1.0:
+        new_w = int(face.width * face_scale)
+        new_h = int(face.height * face_scale)
+        face = face.resize((new_w, new_h), Image.LANCZOS)
+
+    # Center the face (with optional horizontal offset)
+    fx = (CANVAS_SIZE - face.width) // 2 + face_offset_x
+    # Bottom-anchored vertical placement: the original bottom edge stays fixed,
+    # so scaling only expands upward (and left/right).
+    orig_fy = (CANVAS_SIZE - orig_h) // 2
+    orig_bottom = orig_fy + orig_h
+    fy = orig_bottom - face.height
     canvas.paste(face, (fx, fy), face)
 
     if aux is not None:
@@ -92,15 +110,39 @@ def composite(face: Image.Image, aux: Image.Image | None,
 STATES = [
     # (filename, face_emoji, aux_emoji, aux_position)
     ("idle.png",           "🙂",   None,    None),
-    ("sleep.png",          "😴",   None,    None),
+    ("sleep.png",          "😴",   None,    None),  # legacy, kept for compat
+    # Sleep cycle pool (cycled randomly every 10s while sleeping)
+    ("sleep_0.png",        "🥱",   None,    None),  # yawning face
+    ("sleep_1.png",        "😮‍💨", None,    None),  # face exhaling
+    ("sleep_2.png",        "😑",   None,    None),  # expressionless
+    ("sleep_3.png",        "😌",   None,    None),  # relieved
+    ("sleep_4.png",        "😪",   None,    None),  # sleepy face
+    ("sleep_5.png",        "😴",   None,    None),  # sleeping face
+    ("sleep_6.png",        "😌",   None,    None),  # relieved (duplicate)
     ("waiting_0.png",      "😒",   None,    None),
     ("waiting_1.png",      "🙄",   None,    None),
     ("waiting_2.png",      "😑",   None,    None),
     ("waiting_3.png",      "😮‍💨", None,    None),
     ("waiting_4.png",      "😵‍💫", None,    None),
-    ("thinking.png",       "🤔",   None,    None),
-    ("responding.png",     "😊",   "💬",    "top-right"),
-    ("done.png",           "🥳",   None,    None),
+    ("thinking.png",       "🤔",   "💭",    "top-right"),  # legacy
+    # Thinking cycle pool (cycled every 5s while reasoning)
+    ("thinking_0.png",     "🤔",   "💭",    "top-right"),
+    ("thinking_1.png",     "🤔",   "🧠",    "top-right"),
+    ("thinking_2.png",     "🤔",   "💡",    "top-right"),
+    ("thinking_3.png",     "😕",   "💭",    "top-right"),
+    ("thinking_4.png",     "🤯",   None,    None),
+    ("responding.png",     "😊",   "💬",    "top-right"),  # legacy, kept for compat
+    # Responding cycle pool (cycled every 1s while speaking)
+    ("responding_0.png",   "😮",   "💬",    "top-right"),
+    ("responding_1.png",   "😯",   "💬",    "top-right"),
+    ("responding_2.png",   "😲",   "💬",    "top-right"),
+    ("responding_3.png",   "😦",   "💬",    "top-right"),
+    ("responding_4.png",   "😧",   "💬",    "top-right"),
+    ("done.png",           "🥳",   None,    None,     {"face_scale": 1.2, "face_offset_x": 16}),  # legacy
+    # Done celebration pool (cycled every 1s while celebrating)
+    ("done_0.png",         "🥳",   None,    None,     {"face_scale": 1.2, "face_offset_x": 16}),
+    ("done_1.png",         "🤩",   None,    None),
+    ("done_2.png",         "😎",   None,    None),
     ("error.png",          "😱",   "❌",    "bottom-left"),
     ("tool_running.png",   "😖",   "⚙️",    "bottom-left"),
     ("bash.png",           "😖",   "💻",    "bottom-left"),
@@ -110,7 +152,12 @@ STATES = [
     ("write_file.png",     "🧐",   "✍️",    "bottom-left"),
     ("edit_file.png",      "🧐",   "✂️",    "bottom-left"),
     ("find_files.png",     "🧐",   "🔍",    "bottom-left"),
-    ("ask_user.png",       "🤷",   "❓",    "bottom-left"),
+    ("ask_user.png",       "🤷",   "❓",    "bottom-left"),  # legacy
+    # Ask-user pool (cycled every 5s while waiting for user input)
+    ("ask_user_0.png",     "🫣",   "❓",    "top-right"),
+    ("ask_user_1.png",     "😕",   "❓",    "top-right"),
+    ("ask_user_2.png",     "🥺",   "❓",    "top-right"),
+    ("ask_user_3.png",     "😐",   "❓",    "top-right"),
     ("compacting.png",     "😫",   "🗜️",    "bottom-left"),
     ("external_change.png","😲",   "👀",    "bottom-left"),
     ("status_update.png",  "😫",   "🚦",    "bottom-left"),
@@ -129,12 +176,17 @@ STATES = [
 
 def main():
     os.makedirs(STATES_DIR, exist_ok=True)
-    for fname, face, aux, aux_pos in STATES:
+    for entry in STATES:
+        fname, face, aux = entry[0], entry[1], entry[2]
+        aux_pos = entry[3] if len(entry) > 3 else None
+        overrides = entry[4] if len(entry) > 4 else {}
         outpath = os.path.join(STATES_DIR, fname)
         print(f"  {fname:24s}  face={face}  aux={aux or '-':4s}", end="")
         face_img = render_face(face)
         aux_img = render_aux(aux) if aux else None
-        result = composite(face_img, aux_img, aux_pos or "bottom-left")
+        result = composite(face_img, aux_img, aux_pos or "bottom-left",
+                           face_scale=overrides.get("face_scale", 1.0),
+                           face_offset_x=overrides.get("face_offset_x", 0))
         result.save(outpath, "PNG")
         print(f"  → {result.size} ✓")
 

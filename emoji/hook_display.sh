@@ -19,12 +19,13 @@ case "${XI_HOOK_POINT:-}" in
     on_compacting)              t=compacting ;;
     on_external_change)         t=external_change ;;
     on_status_update)           t=status_update ;;
+    on_tool_intent)             ;;
     pre_tool)                   ;;
     *)                          exit 0 ;;
 esac
 
-# ── pre_tool: extract tool name from stdin JSON ───────────────────────────────
-if [ "${XI_HOOK_POINT:-}" = "pre_tool" ]; then
+# ── pre_tool / on_tool_intent: extract tool name from stdin JSON ──────────────
+if [ "${XI_HOOK_POINT:-}" = "pre_tool" ] || [ "${XI_HOOK_POINT:-}" = "on_tool_intent" ]; then
     TOOL=$(jq -r '.tool // empty' 2>/dev/null || echo "")
     if [ -n "$TOOL" ]; then
         # Non-blocking write: times out if daemon isn't running

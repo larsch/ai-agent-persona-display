@@ -14,10 +14,13 @@ bottom-left (264×264). The speech bubble (responding) is top-right.
 | # | State | Hook | Face | Aux |
 |---|-------|------|------|-----|
 | 1 | **idle** | `on_idle` | 🙂 | — |
-| 2 | **sleep** | (30s after idle) | 😴 | — |
+| 2 | **sleep** | (30s after idle) | 🥱😮‍💨😑😌😪😴 | — | Cycles randomly every 10s (never repeats consecutively). |
 
 No hook for sleep — daemon auto-transitions 30s after idle.
 No hook for done→idle — daemon auto-transitions 5s after done.
+
+Sleep displays a randomly-selected face from the pool (🥱 😮‍💨 😑 😌 😪 😴 😌),
+changing to a different image every 10 seconds.
 
 ### Stuck detection
 
@@ -37,7 +40,7 @@ Any state change (FIFO event) resets the timer.
 |---|-------|------|------|-----|---------|
 | 3 | **waiting** | `pre_turn` | 😒🙄😑😮‍💨😵‍💫 | — | Request sent, awaiting first token. Face chosen randomly each turn. |
 | 4 | **thinking** | `on_first_thinking_token` | 🤔 | — | Model is producing chain-of-thought / reasoning. |
-| 5 | **responding** | `on_first_text_token` | 😊 | 💬 | Model is streaming visible output. Speech bubble top-right. |
+| 5 | **responding** | `on_first_text_token` | 😮😯😲😦😧 | 💬 | Model is streaming visible output. Face cycles randomly every 1s (never repeats consecutively). |
 
 ### Tool execution
 
@@ -124,7 +127,10 @@ Either resets on any FIFO event.
 - Suspicious for 15s → worried (😟), 15s more → disappointed (😞), 15s more → sleep (😴).
   Any FIFO event during the chain resets the timer.
 - Any non-idle/non-sleep event during sleep wakes the display.
-- Sleep shows 😴; wakes immediately on any event.
+- Sleep shows a randomly-chosen face from the pool (🥱 😮‍💨 😑 😌 😪 😴 😌);
+  cycles to a different image every 10s. Wakes immediately on any event.
+- Responding cycles randomly through the pool (😮 😯 😲 😦 😧 + 💬) every 1s;
+  never repeats consecutively. Any new FIFO event stops the cycle.
 
 ## Files
 
