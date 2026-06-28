@@ -12,6 +12,9 @@ Usage:
     # Send via daemon
     python3 upload_image.py --send <image_file> [--socket SOCKET] [--quality Q]
 
+    # Set backlight brightness (0=off, 255=full)
+    python3 upload_image.py --brightness <0-255> [--port PORT] [--baud BAUD]
+
 The script converts the image to JPEG, sends it to the device,
 and waits for an "OK" acknowledgment.
 
@@ -32,6 +35,7 @@ import serial
 from PIL import Image
 
 MAGIC = b"IMG!"
+BRIGHTNESS_MAGIC = b"BRI!"
 DISPLAY_WIDTH = 480
 DISPLAY_HEIGHT = 480
 DEFAULT_PORT = "/dev/ttyUSB0"
@@ -125,6 +129,17 @@ def send_over_serial(ser, jpeg_data, baud=DEFAULT_BAUD):
     device_ms = (time.time() - t0) * 1000
 
     return ok_received, decode_us, draw_us, device_ms, send_ms
+
+
+def send_brightness(ser, level):
+    """Send brightness command (0-255) over an already-open serial port.
+    Clamps to 0..255. No acknowledgment is expected."""
+    level = max(0, min(255, int(level)))
+    t0 = time.time()
+    ser.write(BRIGHTNESS_MAGIC + bytes([level]))
+    ser.flush()
+    send_ms = (time.time() - t0) * 1000
+    return level, send_ms
 
 
 # ──────────────────────────────────────────────
@@ -433,6 +448,8 @@ def main():
                         help=f"JPEG quality 1-100 (default: {JPEG_QUALITY})")
     parser.add_argument("--dry-run", action="store_true", help="Process image but don't send over serial")
     parser.add_argument("--save-jpeg", metavar="FILE", help="Save converted JPEG to file for inspection")
+    parser.add_argument("--brightness", type=int, metavar="0-255",
+                        help="Set backlight brightness (0=off, 255=full) and exit")
 
     # Daemon / client mode
     parser.add_argument("--daemon", action="store_true", help="Start persistent daemon (keeps serial port open)")
@@ -441,6 +458,18 @@ def main():
                         help=f"Unix socket path for daemon/client (default: {DEFAULT_SOCKET})")
 
     args = parser.parse_args()
+
+    # ── Brightness mode ────────────────────────────────────────────────
+    if args.brightness is not None:
+        try:
+            ser = open_serial(args.port, args.baud)
+        except serial.SerialException as e:
+            print(f"ERROR: Could not open {args.port}: {e}", file=sys.stderr)
+            sys.exit(1)
+        level, send_ms = send_brightness(ser, args.brightness)
+        ser.close()
+        print(f"Brightness set to {level}/255  (sent in {send_ms:.1f}ms)")
+        sys.exit(0)
 
     if args.daemon:
         if args.image:

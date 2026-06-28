@@ -18,7 +18,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.expanduser("~/prj/esp32s3_4848s040_bootstrap"))
-from upload_image import send_over_serial  # noqa: E402
+from upload_image import send_over_serial, send_brightness  # noqa: E402
 import serial
 
 from states_model import load_states, State
@@ -298,6 +298,20 @@ def run(port, baud, dry_run, states_json):
             try:
                 event = json.loads(line.decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if event.get("event") == "set_brightness":
+                level = event.get("level", 255)
+                if dry_run:
+                    print(f"  [dry] brightness set to {level}/255",
+                          file=sys.stderr)
+                elif ser is not None:
+                    try:
+                        send_brightness(ser, level)
+                        print(f"  brightness set to {level}/255",
+                              file=sys.stderr)
+                    except serial.SerialException:
+                        print("  brightness FAIL (serial error)",
+                              file=sys.stderr)
                 continue
             show(event)
 

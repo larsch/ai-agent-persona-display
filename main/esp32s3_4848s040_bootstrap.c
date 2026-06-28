@@ -66,6 +66,7 @@
 #define IMAGE_UART_RX_BUF    4096
 #define IMAGE_UART_TX_BUF    256
 #define IMAGE_MAGIC          0x21474D49  /* "IMG!" */
+#define BRIGHTNESS_MAGIC      0x21495242  /* "BRI!" */
 #define IMAGE_MAX_JPEG_SIZE  (512 * 1024)
 
 /* ────────── ST7701 init ────────── */
@@ -147,6 +148,13 @@ static void configure_backlight(void)
         .hpoint = 0,
     };
     ESP_ERROR_CHECK(ledc_channel_config(&channel_cfg));
+}
+
+static void set_brightness(uint8_t level)
+{
+    uint32_t duty = ((uint32_t)level * 1023) / 255;
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0));
 }
 
 /* ────────── Panel timing ────────── */
@@ -373,17 +381,34 @@ static esp_err_t decode_and_display(const uint8_t *jpeg_data, size_t jpeg_size)
     return ESP_OK;
 }
 
-/* ────────── Receive one image ────────── */
+/* ────────── Receive one command ────────── */
 static esp_err_t receive_and_display_image(void)
 {
-    uint8_t header[8];
-    esp_err_t ret = uart_read_exact(header, sizeof(header), portMAX_DELAY);
+    uint8_t magic_buf[4];
+    esp_err_t ret = uart_read_exact(magic_buf, sizeof(magic_buf), portMAX_DELAY);
     if (ret != ESP_OK) return ret;
-    uint32_t magic = (uint32_t)header[0] | ((uint32_t)header[1] << 8) |
-                     ((uint32_t)header[2] << 16) | ((uint32_t)header[3] << 24);
-    uint32_t jpeg_size = (uint32_t)header[4] | ((uint32_t)header[5] << 8) |
-                         ((uint32_t)header[6] << 16) | ((uint32_t)header[7] << 24);
-    if (magic != IMAGE_MAGIC) { ESP_LOGW(TAG, "Bad magic"); return ESP_ERR_INVALID_ARG; }
+    uint32_t magic = (uint32_t)magic_buf[0] | ((uint32_t)magic_buf[1] << 8) |
+                     ((uint32_t)magic_buf[2] << 16) | ((uint32_t)magic_buf[3] << 24);
+
+    if (magic == BRIGHTNESS_MAGIC) {
+        uint8_t level;
+        ret = uart_read_exact(&level, 1, pdMS_TO_TICKS(1000));
+        if (ret != ESP_OK) return ret;
+        set_brightness(level);
+        ESP_LOGI(TAG, "Brightness set to %u", (unsigned)level);
+        return ESP_OK;
+    }
+
+    if (magic != IMAGE_MAGIC) {
+        ESP_LOGW(TAG, "Bad magic 0x%08lx", magic);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t size_buf[4];
+    ret = uart_read_exact(size_buf, sizeof(size_buf), pdMS_TO_TICKS(5000));
+    if (ret != ESP_OK) return ret;
+    uint32_t jpeg_size = (uint32_t)size_buf[0] | ((uint32_t)size_buf[1] << 8) |
+                         ((uint32_t)size_buf[2] << 16) | ((uint32_t)size_buf[3] << 24);
     if (jpeg_size == 0 || jpeg_size > IMAGE_MAX_JPEG_SIZE) {
         ESP_LOGW(TAG, "Bad size %lu", jpeg_size); return ESP_ERR_INVALID_SIZE;
     }
