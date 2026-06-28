@@ -170,7 +170,7 @@ def run(port, baud, dry_run, states_json):
     buf = b""
     print("Daemon running.", file=sys.stderr)
 
-    def do_upload(fname, label):
+    def do_upload(fname, label, reason="event"):
         nonlocal last_upload, current_label, current_image
         nonlocal state_entry_time, last_cycle_time, thinking_started
 
@@ -180,9 +180,9 @@ def run(port, baud, dry_run, states_json):
         if not dry_run:
             ok = upload(ser, cache[fname], baud)
             tag = "OK" if ok else "FAIL"
-            print(f"  [{tag}] {label:16s} → {fname}", file=sys.stderr)
+            print(f"  [{tag}] {reason:8s} {label:16s} → {fname}", file=sys.stderr)
         else:
-            print(f"  [dry] {label:16s} → {fname}", file=sys.stderr)
+            print(f"  [dry] {reason:8s} {label:16s} → {fname}", file=sys.stderr)
 
         now = time.monotonic()
 
@@ -197,7 +197,7 @@ def run(port, baud, dry_run, states_json):
         current_image = fname
         last_upload = now
 
-    def show(event, immediate=False):
+    def show(event, immediate=False, reason="event"):
         """Show an event on the display.
 
         If *immediate* is True the debounce is bypassed (used when
@@ -252,14 +252,14 @@ def run(port, baud, dry_run, states_json):
 
         # Flush
         pending_event = None
-        do_upload(fname, state_name)
+        do_upload(fname, state_name, reason)
 
     while True:
         now = time.monotonic()
 
         # ── Flush pending event once debounce/min_display expires ────────
         if pending_event is not None and now >= pending_deadline:
-            show(pending_event, immediate=True)
+            show(pending_event, immediate=True, reason="pending")
 
         # ── Per-state timeouts ───────────────────────────────────────────
         if current_label is not None:
@@ -267,7 +267,7 @@ def run(port, baud, dry_run, states_json):
             if cur_state and cur_state.timeout_ms > 0 and cur_state.timeout_state:
                 elapsed = (now - state_entry_time) * 1000
                 if elapsed >= cur_state.timeout_ms:
-                    show({"event": cur_state.timeout_state})
+                    show({"event": cur_state.timeout_state}, reason="timeout")
 
         # ── Image cycling ────────────────────────────────────────────────
         if current_label is not None:
@@ -280,7 +280,8 @@ def run(port, baud, dry_run, states_json):
                     if not pool:
                         pool = cur_state.images
                     new_img = random.choice(pool)
-                    do_upload(new_img, current_label)
+                    do_upload(new_img, current_label, reason="cycle")
+                    last_cycle_time = now
 
         # ── Poll FIFO ────────────────────────────────────────────────────
         events = poller.poll(100)  # shorter poll for responsive cycling
