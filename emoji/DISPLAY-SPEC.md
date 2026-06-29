@@ -71,14 +71,14 @@ Any state change (FIFO event) resets the timer.
 |18 | **done** | `on_done` | 🥳 | — |
 |19 | **error** | `on_error` | 😱 | ❌ |
 
-## Hook-to-event mapping
+## Hook-to-state mapping
 
-| Hook point | Event type | Image |
+| Hook point | State name | Image |
 |---|---|---|
 | `pre_turn` | `waiting` | `waiting_N.png` (random 0–4) |
 | `on_first_thinking_token` | `thinking` | `thinking.png` |
 | `on_first_text_token` | `responding` | `responding.png` |
-| `pre_tool` | `tool` | `{tool}.png` |
+| `pre_tool` | `tool_<name>` | `{tool}.png` |
 | `on_compacting` | `compacting` | `compacting.png` |
 | `on_external_change` | `external_change` | `external_change.png` |
 | `on_status_update` | `status_update` | `status_update.png` |
@@ -118,26 +118,22 @@ Either resets on any FIFO event.
 
 ## Daemon logic
 
-- All events received via named FIFO (`/tmp/xi_display_fifo`).
-- Events debounced by event type: same event type cannot show twice consecutively.
-- 400ms global debounce between any two uploads.
-- Sleep auto-triggers 30s after `idle` event if no other events arrive.
-- Done auto-transitions to idle 10s after the `done` event if no other events arrive.
-- Any active state (not done, idle, sleep, suspicious, worried, disappointed) for 15s → suspicious (🤨).
-- Suspicious for 15s → worried (😟), 15s more → disappointed (😞), 15s more → sleep (😴).
-  Any FIFO event during the chain resets the timer.
-- Any non-idle/non-sleep event during sleep wakes the display.
-- Sleep shows a randomly-chosen face from the pool (🥱 😮‍💨 😑 😌 😪 😴 😌);
-  cycles to a different image every 10s. Wakes immediately on any event.
-- Responding cycles randomly through the pool (😮 😯 😲 😦 😧 + 💬) every 1s;
-  never repeats consecutively. Any new FIFO event stops the cycle.
+- The daemon accepts generic state transition commands via named FIFO (`/tmp/xi_display_fifo`).
+- Preferred input shape is `{"state":"thinking"}`; compatibility aliases may also be accepted.
+- 400ms global debounce between uploads unless overridden per state in `states.json`.
+- `min_display_ms`, `timeout_ms`, `timeout_state`, and `cycle_interval_ms` are enforced from `states.json`.
+- Sleep, done, suspicious-chain, and other timing behavior are therefore config-driven rather than hardcoded.
+- Agent-specific adapters are responsible for translating native events into configured state names.
+- For xi, `xi_adapter.py` maps hook IPC points like `pre_turn` or `pre_tool` into those configured state names.
 
 ## Files
 
 | File | Role |
 |---|---|
 | `~/prj/emoji/states/*.png` | 480×480 emoji images |
-| `~/prj/emoji/display_daemon.py` | Daemon: FIFO reader, debounce, serial upload |
-| `~/prj/emoji/hook_display.sh` | Hook dispatcher: writes JSON to FIFO |
+| `~/prj/emoji/display_controller.py` | Async state machine: debounce, timeout, cycling |
+| `~/prj/emoji/display_daemon.py` | Single-process daemon: FIFO and/or xi IPC input, state transitions, serial upload |
+| `~/prj/emoji/hooks.toml.example` | Xi hook template: writes generic state JSON to FIFO |
+| `~/prj/emoji/xi_ipc_source.py` | In-process xi hook IPC listener |
 | `~/.config/xi/config.toml` | `[[hooks.*]]` entries |
 | `~/.config/systemd/user/xi-display.service` | systemd user service |

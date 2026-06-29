@@ -9,9 +9,12 @@ agent-loop state. Built with Noto Color Emoji, managed by a systemd daemon.
 ~/prj/emoji/
 ├── AGENTS.md               ← this file
 ├── DISPLAY-SPEC.md          ← state-to-image mapping, transitions, daemon logic
-├── display_daemon.py        ← FIFO reader, debounce, JPEG pre-encode, serial upload
+├── display_controller.py    ← async state-machine controller
+├── display_daemon.py        ← FIFO reader, generic state commands, serial upload
 ├── render_states.py         ← renders all states via ImageMagick pango (see below)
-├── hook_display.sh          ← xi-agent hook → writes JSON line to FIFO
+├── hooks.toml.example       ← xi hook template → writes generic state JSON to FIFO
+├── xi_adapter.py            ← xi hook IPC event → generic state translator
+├── xi_ipc_source.py         ← in-process xi hook IPC listener
 ├── states/                  ← 480×480 emoji PNGs (face ± aux icon)
 │   ├── idle.png                🙂
 │   ├── sleep.png               😴
@@ -51,7 +54,7 @@ agent-loop state. Built with Noto Color Emoji, managed by a systemd daemon.
 ~/.config/systemd/user/xi-display.service  ← systemd user service
 
 ~/prj/esp32s3_4848s040_bootstrap/
-└── upload_image.py          ← serial image uploader (used by daemon)
+└── upload_image.py          ← serial image uploader (used by renderer)
 ```
 
 ## How it runs
@@ -62,13 +65,16 @@ agent-loop state. Built with Noto Color Emoji, managed by a systemd daemon.
 systemctl --user status xi-display
 ```
 
-It listens on `/tmp/xi_display_fifo` for JSON events, pre-encodes all images
-to JPEG at startup, debounces duplicate event types, and uploads via serial.
+It listens on `/tmp/xi_display_fifo` for generic display-state transition
+messages, preloads JPEGs at startup, enforces debounce / min-display / timeout
+behavior from `states.json`, and uploads via serial.
 
-**Hooks** (wired into xi-agent's agent loop):
+**Hooks / IPC adapters** (wired into xi-agent's agent loop):
 
-Each hook calls `hook_display.sh`, which writes one JSON line to the FIFO.
-Example: `{"event":"waiting"}` or `{"event":"tool","tool":"bash"}`.
+Xi can drive the display either by writing direct state JSON such as
+`{"state":"waiting"}` / `{"state":"tool_bash"}` to the FIFO, or through
+hook IPC handled directly inside `display_daemon.py`, which translates xi IPC
+events into those same generic state commands.
 
 Hook config is in `~/.config/xi/config.toml`.
 
@@ -95,10 +101,10 @@ How each image is made:
    trimmed → resized to 320×320 max) or `size='135000'` (aux → 264×264 max).
 2. Face is centered; aux is composited at `bottom-left` or `top-right`
    (20 px padding).
-3. Final composite: 480×480 RGB (black background) → saved as PNG.
+3. Final composite: 480×480 RGB (black background) → saved as JPEG.
 
-To add or change a state, edit the `STATES` list in `render_states.py`,
-re-run the script, then restart the daemon so it re-pre-encodes:
+To add or change a state, edit `states.json`, re-run the renderer, then
+restart the daemon so it reloads the state machine and image cache:
 
 ```
 systemctl --user restart xi-display
@@ -109,7 +115,6 @@ systemctl --user restart xi-display
 1. Add variant to `HookPoint` enum in `~/prj/xi-agent/src/hooks.rs`
 2. Add to the `Display` impl (snake_case name)
 3. Call `maybe_run_hook(...)` at the right spot in `src/agent/mod.rs`
-4. Add to the case statement in `hook_display.sh`
-5. Add `[[hooks.<point>]]` to `~/.config/xi/config.toml`
-6. `cargo build --release` in xi-agent
-7. Restart xi-agent
+4. Add a matching hook entry that writes `{"state":"..."}` to the FIFO
+5. `cargo build --release` in xi-agent
+6. Restart xi-agent
