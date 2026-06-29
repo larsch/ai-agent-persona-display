@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install display-daemon hooks into ~/.config/xi/config.toml.
+"""Install xi hooks that emit generic display-state transitions.
 
 Idempotent — running it again won't add duplicates.
 Does not change any existing config entries.

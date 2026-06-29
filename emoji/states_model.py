@@ -23,7 +23,7 @@ def load_states(path: str) -> tuple[list[State], dict | None, int, int]:
 
     Returns (states, render_dict, global_debounce_ms, jpeg_quality).
     """
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     states = [State(**s) for s in data["states"]]
@@ -44,6 +44,6 @@ def save_states(path: str, states: list[State], render: dict | None,
     }
     if render is not None:
         data["render"] = render
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")

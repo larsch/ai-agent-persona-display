@@ -9,36 +9,44 @@ agent is doing through expressive emoji faces.  Runs on an ESP32-S3 with a
 ## How it works
 
 ```
-agent  ──FIFO──▶  display_daemon.py  ──serial──▶  ESP32  ──▶  LCD
-                       │
-               emoji/states/*.jpg
-                       ▲
-             render_states.py
-                       │
-               emoji/states.json
+agent / xi IPC / adapter  ──▶  display_daemon.py  ──serial──▶  ESP32  ──▶  LCD
+                               │        │
+                               │   emoji/states/*.jpg
+                               │        ▲
+                               │  render_states.py
+                               │        │
+                               └──▶ emoji/states.json
 ```
 
 - **`emoji/render_states.py`** — renders 480×480 JPEG images from emoji
-  definitions in `states.json`.  Uses ImageMagick pango + a Noto Color Emoji
+  definitions in `states.json`. Uses ImageMagick pango + a Noto Color Emoji
   `.ttf` font file (loaded via a temporary fontconfig, no system installation
   needed).
 
-- **`emoji/display_daemon.py`** — reads JSON events from a named FIFO
-  (`/tmp/xi_display_fifo`), picks the corresponding state image, and sends it
-  over serial to the ESP32.  Handles debouncing, min-display time, timeouts,
+- **`emoji/display_controller.py`** — async, config-driven state machine.
+  Loads `states.json` and enforces debounce, min-display time, timeout
   transitions, and image cycling.
 
-- **`emoji/install_hooks.py`** — installs event-forwarding hooks into the
-  agent's config file so it writes events to the FIFO.
+- **`emoji/display_daemon.py`** — the single runtime process. It can read
+  generic state transition commands from a FIFO, host xi hook IPC directly,
+  translate xi events into generic states, and feed them into the controller.
 
-- **`emoji/states.json`** — the single source of truth: state machine
-  definitions, image pools, cycle intervals, timeouts, transitions, and
-  JPEG quality.
+- **`emoji/install_hooks.py`** — installs xi hooks that translate xi activity
+  into generic display states.
+
+- **`emoji/xi_adapter.py`** — pure translator from xi hook IPC events to
+  generic display-state commands.
+
+- **`emoji/xi_ipc_source.py`** — in-process xi hook IPC listener used by the
+  daemon when xi IPC is enabled.
+
+- **`emoji/states.json`** — the integration contract: state names, image pools,
+  cycle intervals, timeout transitions, debounce defaults, and JPEG quality.
 
 ## States
 
 Each state has a face emoji (centered) and an optional auxiliary emoji
-(positioned in a corner).  Supported states include:
+(positioned in a corner). Supported states include:
 
 | State            | Face | Aux  | Meaning                                      |
 |------------------|------|------|----------------------------------------------|
@@ -87,28 +95,57 @@ Images are written to `emoji/states/`.
 
 ### Start the daemon
 
+FIFO mode:
+
 ```sh
 cd emoji
-python display_daemon.py --port /dev/ttyUSB0
+python display_daemon.py --source fifo --port /dev/ttyUSB0
+```
+
+Xi IPC mode in the same process:
+
+```sh
+cd emoji
+python display_daemon.py --source xi-ipc --port /dev/ttyUSB0
+```
+
+Or enable both sources:
+
+```sh
+cd emoji
+python display_daemon.py --source both --port /dev/ttyUSB0
 ```
 
 Use `--dry-run` to test without a connected device.
 
-### Configure event hooks
+### Integrate an agent
 
-The daemon reads JSON events from `/tmp/xi_display_fifo`.  Your agent must
-write one JSON object per line to this FIFO.  Example events:
+The daemon reads one JSON object per line from `/tmp/xi_display_fifo`.
+Adapters should translate agent-specific events into configured state names.
+
+Preferred command shape:
 
 ```json
-{"event": "thinking"}
-{"event": "tool", "tool": "bash"}
-{"event": "responding"}
-{"event": "done"}
-{"event": "error"}
+{"state": "thinking"}
+{"state": "tool_bash"}
+{"state": "responding"}
+{"state": "done"}
+{"state": "error"}
 ```
 
-Use `install_hooks.py` to automatically configure hooks for supported agents,
-or set up the FIFO writer manually in your agent's event pipeline.
+Also accepted for compatibility:
+
+```json
+{"transition": "thinking"}
+{"event": "thinking"}
+{"event": "tool", "tool": "bash"}
+{"set_brightness": 64}
+```
+
+Use `install_hooks.py` to configure xi's shell hooks, or run the daemon in
+`--source xi-ipc` mode to host the xi hook IPC endpoint in the same process.
+Other agents can provide their own adapter that maps native events to the
+state names defined in `states.json`.
 
 ## ESP32 firmware
 
