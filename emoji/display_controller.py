@@ -136,6 +136,11 @@ class DisplayController:
     def current_state(self) -> str | None:
         return self._current_state_name
 
+    def state_snapshot(self) -> tuple[str | None, str | None, float | None]:
+        if self._current_state_name is None:
+            return None, None, None
+        return self._current_state_name, self._current_image_name, self._state_entered_at
+
     async def set_brightness(self, level: int) -> None:
         level = max(0, min(255, int(level)))
         await self.renderer.set_brightness(level)
@@ -188,6 +193,17 @@ class DisplayController:
             await self._show_state_locked(state_name, reason=reason)
             return True
 
+    async def refresh(self, *, reason: str = "refresh") -> bool:
+        async with self._lock:
+            if self._current_state_name is None or self._current_image_name is None:
+                return False
+            await self._render_image_locked(
+                self._current_state_name,
+                self._current_image_name,
+                reason=reason,
+            )
+            return True
+
     def _validate_states(self) -> None:
         for state in self.states:
             if not state.images:
@@ -211,17 +227,22 @@ class DisplayController:
         self._pending_deadline = 0.0
         self._pending_reason = "transition"
 
+    async def _render_image_locked(self, state_name: str, image_name: str, *, reason: str) -> float:
+        _ = reason
+        await self.renderer.render(state_name, image_name, self.image_cache[image_name])
+        now = time.monotonic()
+        self._last_render_at = now
+        return now
+
     async def _show_state_locked(self, state_name: str, *, reason: str) -> None:
         state = self.states_by_name[state_name]
         image_name = random.choice(self._state_images(state))
-        await self.renderer.render(state_name, image_name, self.image_cache[image_name])
-
-        now = time.monotonic()
+        started_at = time.monotonic()
         self._current_state_name = state_name
         self._current_image_name = image_name
-        self._state_entered_at = now
+        self._state_entered_at = started_at
+        now = await self._render_image_locked(state_name, image_name, reason=reason)
         self._last_cycle_at = now
-        self._last_render_at = now
 
     async def _cycle_current_state(self) -> bool:
         async with self._lock:
@@ -238,16 +259,14 @@ class DisplayController:
                 pool = images
 
             image_name = random.choice(pool)
-            await self.renderer.render(
+            self._current_image_name = image_name
+            now = await self._render_image_locked(
                 self._current_state_name,
                 image_name,
-                self.image_cache[image_name],
+                reason="cycle",
             )
 
-            now = time.monotonic()
-            self._current_image_name = image_name
             self._last_cycle_at = now
-            self._last_render_at = now
             return True
 
     async def _service_timers(self) -> None:

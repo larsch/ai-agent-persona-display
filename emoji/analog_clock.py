@@ -29,14 +29,23 @@ from upload_image import (
     send_over_serial,
 )
 
-CENTER = (DISPLAY_WIDTH // 2, DISPLAY_HEIGHT // 2)
+FULL_SIZE = (DISPLAY_WIDTH, DISPLAY_HEIGHT)
 
 
-def _point(angle_deg: float, radius: float) -> tuple[float, float]:
+def _center_for(size: tuple[int, int]) -> tuple[float, float]:
+    return (size[0] / 2, size[1] / 2)
+
+
+def _point(
+    angle_deg: float,
+    radius: float,
+    *,
+    center: tuple[float, float],
+) -> tuple[float, float]:
     angle = math.radians(angle_deg - 90)
     return (
-        CENTER[0] + math.cos(angle) * radius,
-        CENTER[1] + math.sin(angle) * radius,
+        center[0] + math.cos(angle) * radius,
+        center[1] + math.sin(angle) * radius,
     )
 
 
@@ -44,74 +53,109 @@ def _draw_hand(
     draw: ImageDraw.ImageDraw,
     angle_deg: float,
     *,
+    center: tuple[float, float],
     tail_radius: float,
     tip_radius: float,
-    fill: tuple[int, int, int],
+    fill: tuple[int, int, int] | tuple[int, int, int, int],
     width: int,
 ) -> None:
     draw.line(
-        [_point(angle_deg + 180, tail_radius), _point(angle_deg, tip_radius)],
+        [
+            _point(angle_deg + 180, tail_radius, center=center),
+            _point(angle_deg, tip_radius, center=center),
+        ],
         fill=fill,
         width=width,
     )
 
 
-def render_clock_image(now: datetime) -> Image.Image:
-    """Render a 480x480 analog clock for the given time."""
-    image = Image.new("RGB", (DISPLAY_WIDTH, DISPLAY_HEIGHT), "black")
+def render_clock_overlay(
+    now: datetime,
+    *,
+    size: tuple[int, int] = FULL_SIZE,
+    background: tuple[int, int, int] | None = None,
+) -> Image.Image:
+    """Render an analog clock.
+
+    If ``background`` is None, returns an RGBA image with a transparent
+    background suitable for compositing on top of another frame.
+    """
+    scale = min(size) / min(FULL_SIZE)
+    mode = "RGBA" if background is None else "RGB"
+    fill = (0, 0, 0, 0) if background is None else background
+    image = Image.new(mode, size, fill)
     draw = ImageDraw.Draw(image)
 
-    cx, cy = CENTER
-    radius = min(DISPLAY_WIDTH, DISPLAY_HEIGHT) // 2 - 24
+    center = _center_for(size)
+    cx, cy = center
+    radius = min(size) / 2 - max(8, round(24 * scale))
 
-    # Face outline.
+    face_outline = (200, 200, 200, 255) if mode == "RGBA" else (200, 200, 200)
+    major_tick = (255, 255, 255, 255) if mode == "RGBA" else (255, 255, 255)
+    minor_tick = (110, 110, 110, 255) if mode == "RGBA" else (110, 110, 110)
+    hour_fill = (255, 255, 255, 255) if mode == "RGBA" else (255, 255, 255)
+    minute_fill = (80, 180, 255, 255) if mode == "RGBA" else (80, 180, 255)
+    center_fill = (255, 80, 80, 255) if mode == "RGBA" else (255, 80, 80)
+
     draw.ellipse(
         (cx - radius, cy - radius, cx + radius, cy + radius),
-        outline=(200, 200, 200),
-        width=6,
+        outline=face_outline,
+        width=max(2, round(6 * scale)),
     )
 
-    # Minute/hour tick marks.
     for minute in range(60):
-        outer = radius - 10
+        outer = radius - max(3, round(10 * scale))
         if minute % 5 == 0:
-            inner = radius - 42
-            width = 8
-            color = (255, 255, 255)
+            inner = radius - max(10, round(42 * scale))
+            width = max(2, round(8 * scale))
+            color = major_tick
         else:
-            inner = radius - 24
-            width = 3
-            color = (110, 110, 110)
-        draw.line([_point(minute * 6, inner), _point(minute * 6, outer)], fill=color, width=width)
+            inner = radius - max(6, round(24 * scale))
+            width = max(1, round(3 * scale))
+            color = minor_tick
+        draw.line(
+            [
+                _point(minute * 6, inner, center=center),
+                _point(minute * 6, outer, center=center),
+            ],
+            fill=color,
+            width=width,
+        )
 
-    # Hands.
     minute_value = now.minute
     hour_value = (now.hour % 12) + (minute_value / 60)
 
-    hour_angle = hour_value * 30
-    minute_angle = minute_value * 6
-
     _draw_hand(
         draw,
-        hour_angle,
-        tail_radius=18,
+        hour_value * 30,
+        center=center,
+        tail_radius=max(4, round(18 * scale)),
         tip_radius=radius * 0.50,
-        fill=(255, 255, 255),
-        width=12,
+        fill=hour_fill,
+        width=max(3, round(12 * scale)),
     )
     _draw_hand(
         draw,
-        minute_angle,
-        tail_radius=24,
+        minute_value * 6,
+        center=center,
+        tail_radius=max(5, round(24 * scale)),
         tip_radius=radius * 0.78,
-        fill=(80, 180, 255),
-        width=8,
+        fill=minute_fill,
+        width=max(2, round(8 * scale)),
     )
 
-    # Center cap.
-    draw.ellipse((cx - 10, cy - 10, cx + 10, cy + 10), fill=(255, 80, 80))
+    cap_radius = max(3, round(10 * scale))
+    draw.ellipse(
+        (cx - cap_radius, cy - cap_radius, cx + cap_radius, cy + cap_radius),
+        fill=center_fill,
+    )
 
     return image
+
+
+def render_clock_image(now: datetime) -> Image.Image:
+    """Render a full-screen clock with the original black background."""
+    return render_clock_overlay(now, size=FULL_SIZE, background=(0, 0, 0))
 
 
 def encode_clock_jpeg(now: datetime, quality: int = JPEG_QUALITY) -> bytes:

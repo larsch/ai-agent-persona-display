@@ -100,25 +100,34 @@ def open_serial(port, baud, timeout=30):
     return serial.Serial(port, baudrate=baud, timeout=timeout)
 
 
-def send_over_serial(ser, jpeg_data, baud=DEFAULT_BAUD):
+def send_over_serial(ser, jpeg_data, baud=DEFAULT_BAUD, debug: bool = False, debug_prefix: str = ""):
     """Send MAGIC+header+JPEG over an already-open serial port.
     Returns (ok, decode_us, draw_us, device_ms, send_ms)."""
     header = MAGIC + struct.pack("<I", len(jpeg_data))
     jpeg_size = len(jpeg_data)
 
+    def dbg(message: str) -> None:
+        if debug:
+            prefix = f"{debug_prefix} " if debug_prefix else ""
+            print(f"[debug] {prefix}{message}", file=sys.stderr)
+
     t0 = time.time()
+    dbg(f"serial send start header_bytes={len(header)} jpeg_bytes={jpeg_size} baud={baud}")
     ser.write(header)
     ser.write(jpeg_data)
     ser.flush()
     send_ms = (time.time() - t0) * 1000
+    dbg(f"serial send done send_ms={send_ms:.0f}")
 
     # Wait for OK
     ok_received = False
     decode_us = draw_us = 0
     deadline = time.time() + 35
+    dbg("serial ack wait start")
     while time.time() < deadline:
         line = ser.readline().decode("ascii", errors="replace").strip()
         if line:
+            dbg(f"serial line {line!r}")
             if line.startswith("OK"):
                 parts = line.split()
                 if len(parts) >= 3:
@@ -127,6 +136,10 @@ def send_over_serial(ser, jpeg_data, baud=DEFAULT_BAUD):
                 ok_received = True
                 break
     device_ms = (time.time() - t0) * 1000
+    dbg(
+        f"serial ack wait done ok={ok_received} device_ms={device_ms:.0f} "
+        f"decode_ms={decode_us/1000:.0f} draw_ms={draw_us/1000:.0f}"
+    )
 
     return ok_received, decode_us, draw_us, device_ms, send_ms
 
