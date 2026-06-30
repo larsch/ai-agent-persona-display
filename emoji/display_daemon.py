@@ -164,13 +164,14 @@ class ClockOverlayPolicy:
         if state_name == "sleep":
             asleep_seconds = time.monotonic() - entered_at
             if asleep_seconds >= CLOCK_SLEEP_FULLSCREEN_AFTER_SECONDS:
-                clock = render_clock_overlay(now, size=FULL_SIZE, background=(0, 0, 0)).convert("RGB")
-                canvas.paste(clock, (0, 0))
                 agent = base.resize(CLOCK_SLEEP_AGENT_SIZE, Image.LANCZOS)
-                x = FULL_SIZE[0] - CLOCK_PADDING - agent.width
-                y = FULL_SIZE[1] - CLOCK_PADDING - agent.height
+                x = (FULL_SIZE[0] - agent.width) // 2
+                y = (FULL_SIZE[1] // 2) + 10
                 canvas.paste(agent, (x, y))
-                return self._encode(canvas)
+                clock = render_clock_overlay(now, size=FULL_SIZE, background=None)
+                canvas_rgba = canvas.convert("RGBA")
+                canvas_rgba.alpha_composite(clock, (0, 0))
+                return self._encode(canvas_rgba.convert("RGB"))
 
         canvas.paste(base, (0, 0))
         clock = render_clock_overlay(now, size=CLOCK_ACTIVE_SIZE)
