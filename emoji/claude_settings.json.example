@@ -1,0 +1,34 @@
+{
+  "//": "Claude Code hook template for the emoji display daemon.",
+  "//hooks": "Merge the `hooks` block below into ~/.claude/settings.json (or a project .claude/settings.json). install_claude_hooks.py does this for you and substitutes the real absolute path. Every event runs the same claude_hook.py; the script reads hook_event_name from stdin and decides the state. Event -> state mapping lives in claude_adapter.py.",
+  "//command": "Replace __CLAUDE_HOOK__ with: python3 /absolute/path/to/emoji/claude_hook.py",
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ],
+    "PreCompact": [
+      { "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ],
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "__CLAUDE_HOOK__" } ] }
+    ]
+  }
+}

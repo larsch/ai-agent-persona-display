@@ -3,7 +3,8 @@
 
 Supports one or both generic input sources in a single process:
 
-- FIFO state commands
+- FIFO state commands (used directly by Claude Code hooks, the example adapter,
+  and any agent that can echo a state line)
 - xi hook IPC translated to generic state commands
 
 Generic command surface:
@@ -154,7 +155,7 @@ async def main_async(args) -> None:
 
         tasks = [asyncio.create_task(dispatcher_loop(controller, queue), name="dispatcher")]
 
-        if args.source in {"fifo", "both"}:
+        if args.source in {"fifo", "claude", "both"}:
             tasks.append(asyncio.create_task(fifo_source_loop(queue, args.fifo), name="fifo-source"))
         if args.source in {"xi-ipc", "both"}:
             tasks.append(
@@ -176,9 +177,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="display state daemon")
     parser.add_argument(
         "--source",
-        choices=["fifo", "xi-ipc", "both"],
+        choices=["fifo", "xi-ipc", "claude", "both"],
         default="fifo",
-        help="Input source(s) to enable",
+        help="Input source(s) to enable. 'claude' is an alias for 'fifo' "
+        "(Claude Code drives the display via FIFO hooks); 'both' enables "
+        "fifo + xi-ipc.",
     )
     parser.add_argument("--fifo", default=FIFO_PATH, help="Path to command FIFO")
     parser.add_argument(

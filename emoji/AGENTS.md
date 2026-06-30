@@ -15,6 +15,11 @@ agent-loop state. Built with Noto Color Emoji, managed by a systemd daemon.
 ├── hooks.toml.example       ← xi hook template → writes generic state JSON to FIFO
 ├── xi_adapter.py            ← xi hook IPC event → generic state translator
 ├── xi_ipc_source.py         ← in-process xi hook IPC listener
+├── claude_hook.py           ← Claude Code hook entrypoint → writes state JSON to FIFO
+├── claude_adapter.py        ← Claude Code hook event → generic state translator
+├── claude_settings.json.example ← Claude Code settings.json hooks template
+├── install_claude_hooks.py  ← merge hooks into ~/.claude/settings.json (idempotent)
+├── claude-display.service   ← systemd user unit (daemon with --source claude)
 ├── states/                  ← 480×480 emoji PNGs (face ± aux icon)
 │   ├── idle.png                🙂
 │   ├── sleep.png               😴
@@ -77,6 +82,36 @@ hook IPC handled directly inside `display_daemon.py`, which translates xi IPC
 events into those same generic state commands.
 
 Hook config is in `~/.config/xi/config.toml`.
+
+**Claude Code** (wired via `settings.json` hooks):
+
+Claude Code has no persistent IPC — it fires one-shot hook commands and pipes
+the event payload as JSON on stdin. So it uses the FIFO path directly: every
+hook event runs `claude_hook.py`, which reads the payload, asks
+`claude_adapter.py` for a state, and writes `{"state":"…"}` to the same daemon
+FIFO. Run the daemon with `--source claude` (an alias for `--source fifo`,
+self-documenting which agent is driving it).
+
+Install (merges into `~/.claude/settings.json`, idempotent, backs up first):
+
+```
+python3 install_claude_hooks.py
+```
+
+Pass `--settings .claude/settings.json` to scope it to a single project instead.
+The full mapping (which event/tool → which state) lives in `claude_adapter.py`;
+`test_claude_adapter.py` checks it (`python3 test_claude_adapter.py`).
+
+Run the daemon under systemd with the bundled unit:
+
+```
+cp claude-display.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now claude-display
+```
+
+(Adjust `--port`/`--baud` in the unit to match your board. Don't run
+`claude-display` and `xi-display` at once — they'd both drive the display.)
 
 ## How to render new images
 

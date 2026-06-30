@@ -86,6 +86,40 @@ Any state change (FIFO event) resets the timer.
 | `on_idle` | `idle` | `idle.png` |
 | `on_error` | `error` | `error.png` |
 
+## Claude Code hook-to-state mapping
+
+Claude Code fires one-shot hooks (configured in `settings.json`) with the event
+payload on stdin. `claude_hook.py` + `claude_adapter.py` translate each event
+into a generic state and write it to the same FIFO. Mapping:
+
+| Hook event | Condition | State |
+|---|---|---|
+| `UserPromptSubmit` | — | `waiting` |
+| `PreToolUse` | `tool_name` Bash | `tool_bash` |
+| `PreToolUse` | `tool_name` Read | `tool_read_file` |
+| `PreToolUse` | `tool_name` Edit / MultiEdit / NotebookEdit | `tool_edit_file` |
+| `PreToolUse` | `tool_name` Write | `tool_write_file` |
+| `PreToolUse` | `tool_name` Glob / Grep / WebFetch / WebSearch | `tool_find_files` |
+| `PreToolUse` | `tool_name` AskUserQuestion / ExitPlanMode | `tool_ask_user` |
+| `PreToolUse` | any other tool | `tool_running` |
+| `PostToolUse` | — | `thinking` |
+| `PostToolUseFailure` | — | `error` |
+| `Notification` | `notification_type` permission/elicitation | `tool_ask_user` |
+| `Notification` | `notification_type` auth | `login` |
+| `Stop` | — | `done` |
+| `StopFailure` | rate-limit reason | `rate_limited` |
+| `StopFailure` | other | `error` |
+| `SubagentStart` | — | `tool_running` |
+| `SubagentStop` | — | `thinking` |
+| `PreCompact` | — | `compacting` |
+| `PostCompact` | — | `thinking` |
+| `SessionStart` / `SessionEnd` | — | `idle` |
+| `FileChanged` | — | `external_change` |
+
+Claude Code exposes no streaming-token hooks, so `thinking`/`responding` are
+approximated from turn structure (post-tool, post-compact) rather than driven
+token-by-token as with xi.
+
 ## Transition diagram
 
 ```
@@ -125,6 +159,7 @@ Either resets on any FIFO event.
 - Sleep, done, suspicious-chain, and other timing behavior are therefore config-driven rather than hardcoded.
 - Agent-specific adapters are responsible for translating native events into configured state names.
 - For xi, `xi_adapter.py` maps hook IPC points like `pre_turn` or `pre_tool` into those configured state names.
+- For Claude Code, `claude_hook.py` + `claude_adapter.py` map `settings.json` hook events into those same state names and write them to the FIFO (Claude Code has no persistent IPC).
 
 ## Files
 
@@ -135,5 +170,9 @@ Either resets on any FIFO event.
 | `~/prj/emoji/display_daemon.py` | Single-process daemon: FIFO and/or xi IPC input, state transitions, serial upload |
 | `~/prj/emoji/hooks.toml.example` | Xi hook template: writes generic state JSON to FIFO |
 | `~/prj/emoji/xi_ipc_source.py` | In-process xi hook IPC listener |
-| `~/.config/xi/config.toml` | `[[hooks.*]]` entries |
+| `~/prj/emoji/claude_hook.py` | Claude Code hook entrypoint: stdin event → state → FIFO |
+| `~/prj/emoji/claude_adapter.py` | Claude Code hook event → generic state translator |
+| `~/.config/xi/config.toml` | xi `[[hooks.*]]` entries |
+| `~/.claude/settings.json` | Claude Code `hooks` entries |
+| `~/prj/emoji/claude-display.service` | systemd user unit (daemon `--source claude`) |
 | `~/.config/systemd/user/xi-display.service` | systemd user service |
