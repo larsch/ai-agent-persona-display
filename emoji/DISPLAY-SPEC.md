@@ -121,6 +121,7 @@ Either resets on any FIFO event.
 - The daemon accepts generic state transition commands via named FIFO (`/tmp/xi_display_fifo`).
 - Preferred input shape is `{"state":"thinking"}`; compatibility aliases may also be accepted.
 - 400ms global debounce between uploads unless overridden per state in `states.json`.
+- Debounce is defined on the target state: a state is not shown until its `debounce_ms` has elapsed since the last actual display change, and if another transition arrives first the pending state is replaced. If a state does not set `debounce_ms`, the 400ms global debounce applies.
 - `min_display_ms`, `timeout_ms`, `timeout_state`, and `cycle_interval_ms` are enforced from `states.json`.
 - Sleep, done, suspicious-chain, and other timing behavior are therefore config-driven rather than hardcoded.
 - Agent-specific adapters are responsible for translating native events into configured state names.

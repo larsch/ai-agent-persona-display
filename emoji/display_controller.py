@@ -177,8 +177,7 @@ class DisplayController:
                         return False
 
             if not immediate and self._current_state_name is not None:
-                current_state = self.states_by_name[self._current_state_name]
-                debounce_ms = current_state.debounce_ms
+                debounce_ms = state.debounce_ms
                 if debounce_ms is None:
                     debounce_ms = self.global_debounce_ms
                 if (now - self._last_render_at) * 1000 < debounce_ms:

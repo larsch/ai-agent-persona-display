@@ -16,7 +16,8 @@
     },
     {
       "name": "waiting",
-      "images": ["waiting_0.jpg","waiting_1.jpg","waiting_2.jpg","waiting_3.jpg","waiting_4.jpg","waiting_5.jpg"]
+      "images": ["waiting_0.jpg","waiting_1.jpg","waiting_2.jpg","waiting_3.jpg","waiting_4.jpg","waiting_5.jpg"],
+      "debounce_ms": 4000
     },
     {
       "name": "thinking",
