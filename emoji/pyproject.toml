@@ -7,5 +7,5 @@ requires-python = ">=3.13"
 dependencies = [
     "pillow>=12.2.0",
     "pyserial>=3.5",
-    "pywin32>=312",
+    "pywin32>=312; sys_platform == 'win32'",
 ]
