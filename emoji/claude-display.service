@@ -1,0 +1,27 @@
+# systemd user service for the emoji display daemon, driven by Claude Code.
+#
+# Mirrors the xi-display.service unit, but runs the daemon with --source claude
+# (FIFO input). Claude Code's hooks (installed via install_claude_hooks.py) write
+# states into the same FIFO this daemon reads.
+#
+# Install:
+#   cp claude-display.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now claude-display
+#
+# Adjust ExecStart's --port/--baud to match your board. Don't run this and
+# xi-display at the same time — they would both drive the same display.
+
+[Unit]
+Description=Emoji display daemon (Claude Code)
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/duck/projects/ai-agent-persona-display/emoji
+ExecStart=/usr/bin/python3 /home/duck/projects/ai-agent-persona-display/emoji/display_daemon.py --source claude --port /dev/ttyUSB0 --baud 3000000
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
