@@ -6,6 +6,8 @@ agent is doing through expressive emoji faces.  Runs on an ESP32-S3 with a
 
 ![Demo cycle](emoji/demo.gif)
 
+![Guition persona display](guition-persona-display.jpg)
+
 ## How it works
 
 ```
